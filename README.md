@@ -5,7 +5,7 @@ A [Pi](https://pi.dev/) extension that lets you use [JetBrains Junie](https://ju
 ## Install
 
 ```bash
-pi install pi-jetbrains-junie-bridge
+pi install npm:pi-jetbrains-junie-bridge
 ```
 
 Then inside `pi` run the `/login` command.  Select `Use a subscription` and then `JetBrains Junie` to authenticate.

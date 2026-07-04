@@ -1,6 +1,6 @@
 {
   "name": "pi-jetbrains-junie-bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pi extension that connects Pi coding agent with JetBrains Junie as the AI backend",
   "type": "module",
   "pi": {
@@ -8,7 +8,7 @@
   },
   "keywords": [
     "pi",
-    "pi-extension",
+    "pi-package",
     "junie",
     "jetbrains",
     "coding-agent",
