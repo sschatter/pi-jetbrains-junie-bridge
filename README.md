@@ -8,26 +8,17 @@ A [Pi](https://pi.dev/) extension that lets you use [JetBrains Junie](https://ju
 pi install pi-jetbrains-junie-bridge
 ```
 
-## How It Works
+Then inside `pi` run the `/login` command.  Select `Use a subscription` and then `JetBrains Junie` to authenticate.
 
-The extension starts a local proxy server that translates between Pi and JetBrains' Grazie backend. On first use, you'll authenticate via JetBrains OAuth (browser-based PKCE flow).
-
-```
-┌─────────┐     ┌──────────────┐     ┌──────────────┐
-│   Pi    │────>│  pi-junie    │────>│ Junie/Grazie │
-│ agent   │     │  local proxy │     │   backend    │
-└─────────┘     └──────────────┘     └──────────────┘
-```
-
-- OpenAI models (`openai-gpt-*`) are forwarded via `/v1/chat/completions`
-- Anthropic models (`claude-*`) are forwarded via `/v1/messages`
-- The proxy runs on an ephemeral port and shuts down when Pi exits
+Once authenticated, run `/model` to select a model provided by the junie bridge.
 
 ## Features
 
 - **OAuth login** — browser-based JetBrains authentication with automatic token refresh
-- **Balance tracking** — session cost and remaining balance shown in Pi's status line
+- **Balance tracking** — session cost and remaining balance shown in Pi's status line (see footer)
+  ![Screnshot showcasing balance tracking](./docs/balance_tracking.png)
 - **`/junie` command** — check proxy status, balance, and available models from within Pi
+  ![Screnshot showcasing the `junie` command](./docs/junie_command.png)
 
 ## Available Models
 
@@ -53,9 +44,26 @@ Only OpenAI and Anthropic (Claude) models are supported. Google/Gemini models ar
 - Node.js 20+
 - A [JetBrains Junie subscription](https://junie.jetbrains.com/)
 
+
+## How It Works
+
+The extension starts a local proxy server that translates between Pi and JetBrains' Grazie backend. On first use, you'll authenticate via JetBrains OAuth (browser-based PKCE flow).
+
+```
+┌─────────┐     ┌──────────────┐     ┌──────────────┐
+│   Pi    │────>│  pi-junie    │────>│ Junie/Grazie │
+│ agent   │     │  local proxy │     │   backend    │
+└─────────┘     └──────────────┘     └──────────────┘
+```
+
+- OpenAI models (`openai-gpt-*`) are forwarded via `/v1/chat/completions`
+- Anthropic models (`claude-*`) are forwarded via `/v1/messages`
+- The proxy runs on an ephemeral port and shuts down when Pi exits
+
 ## Disclaimer
 
-This extension includes a proxy server reverse-engineered from the official [JetBrains Junie CLI](https://github.com/JetBrains/junie). It is not officially supported by JetBrains. Use it in accordance with the [JetBrains AI Service Terms of Service](https://www.jetbrains.com/legal/docs/toolbox/ai-service-terms/).
+This extension includes a proxy server reverse-engineered from the official [JetBrains Junie CLI](https://github.com/JetBrains/junie).
+It is not officially supported by JetBrains. Use it in accordance with the [JetBrains AI Service Terms of Service](https://www.jetbrains.com/legal/docs/toolbox/ai-service-terms/).
 
 ## License
 
