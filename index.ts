@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { startServer } from "./lib/server.mjs";
 import { junieLogin, junieRefreshToken } from "./lib/oauth.mjs";
 import { buildProviderModels, cleanOldModelsJson } from "./lib/models.mjs";
-import { getProxyUrl } from "./lib/proxy.mjs";
+import { getProxyUrl, getProxyDiagnostics } from "./lib/proxy.mjs";
 
 const require = createRequire(import.meta.url);
 const { version: PLUGIN_VERSION } = require("./package.json");
@@ -74,20 +74,28 @@ export default async function (pi: ExtensionAPI) {
 
   // /junie command for debugging and status
   pi.registerCommand("junie", {
-    description: "Show Junie proxy status, balance, and model info",
-    async handler(_args, ctx) {
+    description: "Show Junie proxy status, balance, and connectivity info",
+    async handler(args, ctx) {
       try {
-        const balanceRes = await fetch(`http://localhost:${port}/junie/balance`);
+        const apiKey = await ctx.modelRegistry.getApiKeyForProvider("junie");
+        const balanceHeaders: Record<string, string> = {};
+        if (apiKey) balanceHeaders["Authorization"] = `Bearer ${apiKey}`;
+        const balanceRes = await fetch(`http://localhost:${port}/junie/balance`, { headers: balanceHeaders });
         const balanceInfo = balanceRes.ok ? await balanceRes.json() : null;
 
         const modelsRes = await fetch(`http://localhost:${port}/v1/models`);
         const modelsInfo = modelsRes.ok ? await modelsRes.json() : null;
 
+        const diag = getProxyDiagnostics();
+
         const lines = [
           `**Junie Bridge** v${PLUGIN_VERSION} — proxy on port ${port}`,
-          `**HTTP Proxy:** ${getProxyUrl() ?? "none (direct connection)"}`,
-          "",
+          `**HTTP Proxy:** ${diag.proxy ?? "none (direct connection)"}`,
         ];
+        if (diag.proxy) {
+          lines.push(`**Proxy Auth:** ${diag.auth}`);
+        }
+        lines.push("");
 
         if (balanceInfo?.balanceLeft != null) {
           const isCredits = balanceInfo.balanceUnit === "CREDITS";
@@ -100,6 +108,18 @@ export default async function (pi: ExtensionAPI) {
           }
         } else {
           lines.push("**Balance:** unavailable (not authenticated — run /login)");
+        }
+
+        // Run connectivity test if requested or if proxy is configured
+        if (args?.trim() === "test" || diag.proxy) {
+          const testRes = await fetch(`http://localhost:${port}/junie/test`);
+          const testInfo = await testRes.json();
+          lines.push("");
+          lines.push("**Connectivity:**");
+          for (const [name, t] of Object.entries(testInfo.tests) as [string, any][]) {
+            const icon = t.ok ? "+" : "!";
+            lines.push(`- [${icon}] ${name}: ${t.ok ? `ok${t.status ? ` (${t.status})` : ""}` : t.error}`);
+          }
         }
 
         if (modelsInfo?.data) {
