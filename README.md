@@ -39,6 +39,19 @@ Only OpenAI and Anthropic (Claude) models are supported. Google/Gemini models ar
 - `openai-gpt-5-4` — reasoning effort not adjustable (OpenAI limitation with tool use)
 - `openai-gpt-5-5` — reasoning effort not adjustable (OpenAI limitation with tool use)
 
+## Proxy Support
+
+The extension respects the standard `HTTPS_PROXY` / `HTTP_PROXY` environment variables. This is useful in corporate environments where internet access is only available through a proxy.
+
+All outgoing requests to JetBrains (OAuth and Grazie backend) are routed through the configured proxy. Local traffic between Pi and the bridge stays direct.
+
+```bash
+# Example
+export HTTPS_PROXY=http://proxy.corp.example.com:8080
+```
+
+You can verify the active proxy with the `/junie` command inside Pi.
+
 ## Requirements
 
 - Node.js 20+
