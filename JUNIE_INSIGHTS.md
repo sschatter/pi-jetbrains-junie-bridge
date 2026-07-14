@@ -2,6 +2,8 @@
 
 This document captures knowledge about the JetBrains Junie CLI internals to make future updates easier.
 
+Currently available models are also always found here: https://llm24.net/llm/junie.txt
+
 ## Source of Truth
 
 The Junie GitHub repo (https://github.com/JetBrains/junie) is **only an installer/distribution repo** — it contains shell scripts and agent registry JSON, not the actual application source code.
