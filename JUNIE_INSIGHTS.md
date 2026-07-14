@@ -88,9 +88,57 @@ https://ingrazzio-cloud-prod.labs.jb.gg
 ```
 
 Routes:
-- `/v1/chat/completions` — OpenAI models
+- `/v1/responses` — OpenAI models (OpenAI Responses API) — used by the bridge
+- `/v1/chat/completions` — OpenAI models (legacy; can't combine reasoning effort + tools)
 - `/v1/messages` — Anthropic models
 - `/auth/test` — balance/auth check
+
+The full route list is defined in `LLMAccess$Companion` (and, with the `/v5/llm/<provider>/...` prefix, in `DirectProxyLLMAccess`):
+`/v1/audio/transcriptions`, `/v1/chat/completions`, `/v1/messages`, `/v1/responses`.
+
+## OpenAI: Responses API vs Chat Completions (reasoning effort)
+
+The Grazie backend rejects `reasoning_effort` on `/v1/chat/completions` for the newer
+GPT‑5 models when function tools are present:
+
+```
+Function tools with reasoning_effort are not supported for gpt-5.6-luna in
+/v1/chat/completions. To use function tools, use /v1/responses or set
+reasoning_effort to 'none'.
+```
+
+Junie itself avoids this by sending OpenAI requests through the **OpenAI Responses
+API** (`/v1/responses`). The selection logic lives in:
+
+| What | Class path |
+|------|-----------|
+| API selection (Responses vs ChatCompletion) | `com/intellij/ml/llm/matterhorn/llm/ModelParametersExKt` (`getOpenAIApi`, `getSupportedApi`) |
+| Client factory | `com/intellij/ml/llm/matterhorn/core/llm/google/OpenAICompatibleClientProvider` (`getClient`) |
+| Responses request/response | `com/intellij/ml/llm/matterhorn/core/llm/openai/responses/OpenAIResponsesClient` + `OpenAIResponsesRequest` |
+| Responses payload schema | `com/intellij/ml/llm/matterhorn/core/llm/openai/responses/schema/CreateResponsePayload` |
+
+`getOpenAIApi` prefers `Responses` for OpenAI models (unless `preferOpenAIChatAPI`
+is set and ChatCompletion is supported). The reasoning effort enum
+(`ReasoningEffort`) has the values: `minimal`, `low`, `medium`, `high`, `xhigh`, `none`.
+
+`CreateResponsePayload` (the `/v1/responses` body) accepts these JSON fields:
+`model`, `input`, `instructions`, `metadata`, `tools`, `tool_choice`, `include`,
+`reasoning` (`{effort, summary}`), `text` (`{format, verbosity}`), `response_format`,
+`parallel_tool_calls`, `prompt_cache_key`, `prompt_cache_retention`,
+`previous_response_id`, `store`, `stream`, `temperature`, `top_p`, `cache_control`.
+
+### How the bridge uses this
+
+Pi natively supports the Responses API (`api: "openai-responses"` in `pi-ai`), so the
+bridge:
+1. Registers OpenAI models with `api: "openai-responses"`, `reasoning: true`, and a
+   `thinkingLevelMap` mapping Pi's thinking levels to the `ReasoningEffort` values
+   (`off → none`, `xhigh`/`max → xhigh`; `minimal/low/medium/high` pass through).
+   See `buildProviderModels` in `lib/models.mjs`.
+2. Adds a `/v1/responses` route (`handleResponses` in `lib/server.mjs`) that forwards
+   to the ingrazzio `/v1/responses` endpoint using the same OpenAI headers. The payload
+   is sanitized against `RESPONSES_ALLOWED` (fields Pi sends that the backend doesn't
+   understand — e.g. `max_output_tokens`, `service_tier` — are dropped).
 
 ## Model Capabilities
 
@@ -142,7 +190,7 @@ The integer values represent `[maxOutputTokens, maxContextTokens]`. When only on
 
 ## Model Routing
 
-- `openai-*` models → forwarded as OpenAI chat completions, model ID mapped (e.g. `openai-gpt-5-4` → `gpt-5.4`)
+- `openai-*` models → forwarded via the OpenAI **Responses API** (`/v1/responses`), model ID mapped (e.g. `openai-gpt-5-4` → `gpt-5.4`). This lets reasoning effort be combined with function tools (see the Responses API section above).
 - `claude-*` models → forwarded as Anthropic messages, model ID passed through as-is
 - `google-*` models → **not supported** via OAuth; Grazie requires native protocol for these
 
@@ -156,10 +204,12 @@ When updating to a new Junie CLI version:
 4. For new OpenAI models, add the ID mapping to `OPENAI_MODEL_MAP` in `lib/server.mjs`
 5. Update the `Grazie-Agent` version in `lib/server.mjs`
 6. Check if OAuth config or API endpoints changed (unlikely but worth verifying)
+7. Verify OpenAI models still use `api: "openai-responses"` and that `RESPONSES_ALLOWED` (in `lib/server.mjs`) still matches the upstream `CreateResponsePayload` schema
 
 ## Version History
 
 | Bridge update | Junie CLI version | Changes |
 |--------------|-------------------|---------|
+| 2026-07-14 | v2144.7 | Route OpenAI models through the OpenAI Responses API (`/v1/responses`) instead of `/v1/chat/completions`, so reasoning effort can be combined with function tools (fixes the `reasoning_effort ... not supported ... in /v1/chat/completions` error on gpt-5.6). OpenAI models now register with `api: "openai-responses"`, `reasoning: true`, and a `thinkingLevelMap`. Added `handleResponses`/`RESPONSES_ALLOWED` in `lib/server.mjs`. |
 | 2026-07-04 | v2144.7 | Added claude-sonnet-5, claude-opus-4-8, claude-fable-5, openai-gpt-5-5. Updated Grazie-Agent version from 888.219 to 2144.7. Fixed model capabilities: Claude 4.6+ models have 1M context / 128k output (was incorrectly 200k/16k). OpenAI 5.2/5.3 have 400k context, 5.4/5.5 have 1M (was all incorrectly ~1M). Removed unavailable models (5.1 series, sonnet-4-5, opus-4-5). |
 | Initial | v1468.30 | Original model list and configuration. |

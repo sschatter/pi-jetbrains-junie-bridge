@@ -26,6 +26,8 @@ Only OpenAI and Anthropic (Claude) models are supported. Google/Gemini models ar
 
 **Recommendation:** Use the Claude models — only Anthropic models send reasoning blocks (extended thinking) to Pi, which significantly improves coding output quality.
 
+For all models — Claude and OpenAI alike — the reasoning effort is adjustable in Pi (e.g. via `/model`). OpenAI models are routed through the OpenAI **Responses API** (`/v1/responses`), which is the only OpenAI surface on the Grazie backend that accepts a reasoning effort together with function tools.
+
 **Anthropic:**
 - `claude-sonnet-4-6`
 - `claude-sonnet-5`
@@ -36,8 +38,11 @@ Only OpenAI and Anthropic (Claude) models are supported. Google/Gemini models ar
 
 **OpenAI:**
 - `openai-gpt-5-2`
-- `openai-gpt-5-4` — reasoning effort not adjustable (OpenAI limitation with tool use)
-- `openai-gpt-5-5` — reasoning effort not adjustable (OpenAI limitation with tool use)
+- `openai-gpt-5-4`
+- `openai-gpt-5-5`
+- `openai-gpt-5-6-luna`
+- `openai-gpt-5-6-terra`
+- `openai-gpt-5-6-sol`
 
 ## Proxy Support
 
@@ -69,7 +74,7 @@ The extension starts a local proxy server that translates between Pi and JetBrai
 └─────────┘     └──────────────┘     └──────────────┘
 ```
 
-- OpenAI models (`openai-gpt-*`) are forwarded via `/v1/chat/completions`
+- OpenAI models (`openai-gpt-*`) are forwarded via `/v1/responses` (OpenAI Responses API) so reasoning effort works together with tool calls
 - Anthropic models (`claude-*`) are forwarded via `/v1/messages`
 - The proxy runs on an ephemeral port and shuts down when Pi exits
 
