@@ -12,11 +12,11 @@
     "server"
   ],
   "exports": {
-    ".": "./opencode/index.mjs",
-    "./server": "./opencode/index.mjs"
+    ".": "./opencode/index.ts",
+    "./server": "./opencode/index.ts"
   },
-  "main": "./opencode/index.mjs",
-  "opencode": "./opencode/index.mjs",
+  "main": "./opencode/index.ts",
+  "opencode": "./opencode/index.ts",
   "keywords": [
     "pi",
     "pi-package",
@@ -41,6 +41,7 @@
   },
   "files": [
     "index.ts",
+    "opencode/index.ts",
     "lib/",
     "opencode/",
     "docs/",

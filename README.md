@@ -46,7 +46,7 @@ Add the plugin file to OpenCode's config instead:
 ```json
 {
   "plugin": [
-    "file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/opencode/index.mjs"
+    "file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/opencode/index.ts"
   ]
 }
 ```
