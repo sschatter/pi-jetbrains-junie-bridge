@@ -1,7 +1,15 @@
 import { tool } from "@opencode-ai/plugin";
 import type { Config, Hooks, PluginInput } from "@opencode-ai/plugin";
 import { startJunieBridge, fetchBridgeJson } from "../lib/bridge.mjs";
-import { collectDiagnostics, formatBalanceToast, formatDiagnosticsReport } from "../lib/diagnostics.mjs";
+import {
+  availableCredits,
+  collectDiagnostics,
+  formatBalanceToast,
+  formatDiagnosticsReport,
+  formatTurnResult,
+  monthlyAvailableCredits,
+  topUpAvailableCredits,
+} from "../lib/diagnostics.mjs";
 import {
   KNOWN_GRAZIE_MODELS,
   MODEL_CLASSIFICATIONS,
@@ -86,6 +94,7 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
   const bridge = await startJunieBridge();
   let availability = new Set<string>(KNOWN_GRAZIE_MODELS);
   let accessToken: string | undefined;
+  const turns = new Map<string, { startedAt: number; startingBalance?: number }>();
 
   const rememberAccessToken = (credentials: { access?: string; refresh?: string } | undefined) => {
     if (credentials?.access) accessToken = credentials.access;
@@ -122,6 +131,20 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
       return formatDiagnosticsReport(diagnostics);
     },
   });
+
+  const printTurnResult = async (sessionID: string, result: string) => {
+    try {
+      await input.client.session.prompt({
+        path: { id: sessionID },
+        body: {
+          noReply: true,
+          parts: [{ type: "text", text: result, ignored: true }],
+        },
+      });
+    } catch {
+      // Reporting is best-effort and must not affect model requests.
+    }
+  };
 
   return {
     auth: {
@@ -172,10 +195,39 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
       provider.options.baseURL ??= `${bridge.baseUrl}/v1`;
       provider.models = { ...(provider.models ?? {}), ...buildModels({ id: PROVIDER_ID }) };
     },
+    "chat.message": async ({ sessionID, model }) => {
+      if (!accessToken || turns.has(sessionID) || model?.providerID !== PROVIDER_ID) return;
+      let startingBalance: number | undefined;
+      try {
+        const { body } = await fetchBridgeJson(bridge, "/junie/balance", { accessToken });
+        startingBalance = availableCredits(body);
+      } catch {
+        // The elapsed time is still useful if the pre-turn balance is unavailable.
+      }
+      turns.set(sessionID, { startedAt: Date.now(), startingBalance });
+    },
     event: async ({ event }) => {
       if (event.type !== "session.idle" || !accessToken) return;
+      const sessionID = (event.properties as { sessionID?: string } | undefined)?.sessionID;
+      if (!sessionID) return;
+      const turn = turns.get(sessionID);
+      turns.delete(sessionID);
       try {
         const diagnostics = await collectDiagnostics(bridge, accessToken);
+        const remaining = availableCredits(diagnostics.balance);
+        const monthlyRemaining = monthlyAvailableCredits(diagnostics.balance);
+        const topUpRemaining = topUpAvailableCredits(diagnostics.balance);
+        const cost = turn?.startingBalance !== undefined && remaining !== undefined
+          ? Math.max(0, turn.startingBalance - remaining)
+          : undefined;
+        if (turn) {
+          await printTurnResult(sessionID, formatTurnResult({
+            durationMs: Date.now() - turn.startedAt,
+            cost,
+            remaining: monthlyRemaining ?? remaining,
+            topUpRemaining,
+          }));
+        }
         if (diagnostics.balance) {
           await input.client.tui?.showToast?.({
             body: { message: formatBalanceToast(diagnostics.balance), variant: "info" },

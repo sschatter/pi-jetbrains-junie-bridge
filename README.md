@@ -74,7 +74,9 @@ command above.
   through unchanged, so Pi's built-in detection recognises it (verified live against
   Claude, OpenAI, Grok and Gemini).
 - **OpenCode-native authentication and provider catalog** — browser OAuth, verified
-  model limits, family-specific routing, and best-effort balance toasts.
+  model limits, family-specific routing, and a post-turn `TASK RESULT` line with
+  elapsed time, Junie credit cost, and remaining balance. Balance toasts remain
+  available as a transient notification.
 
 ## Available Models
 
