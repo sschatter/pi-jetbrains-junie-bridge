@@ -1,6 +1,6 @@
 # pi-jetbrains-junie-bridge
 
-A [Pi](https://pi.dev/) extension that lets you use [JetBrains Junie](https://junie.jetbrains.com/) as the AI backend for the Pi coding agent — using your existing Junie subscription.
+A [Pi](https://pi.dev/) extension and [OpenCode](https://opencode.ai/) plugin that lets you use [JetBrains Junie](https://junie.jetbrains.com/) as the AI backend — using your existing Junie subscription.
 
 ## Install
 
@@ -11,6 +11,50 @@ pi install npm:pi-jetbrains-junie-bridge
 Then inside `pi` run the `/login` command.  Select `Use a subscription` and then `JetBrains Junie` to authenticate.
 
 Once authenticated, run `/model` to select a model provided by the junie bridge.
+
+### OpenCode
+
+Install the package as an OpenCode server plugin:
+
+```bash
+opencode plugin pi-jetbrains-junie-bridge
+```
+
+Restart OpenCode after installation. The plugin registers `junie` as a custom
+provider, starts its own local bridge, stores credentials in OpenCode's
+credential store, and provides the verified Junie models without a manual
+provider block.
+
+OpenCode's `/connect` list is sourced from its built-in provider catalog and
+does not show custom plugin providers as **JetBrains Junie**. To authenticate,
+run this from PowerShell or another terminal:
+
+```bash
+opencode auth login --provider junie
+```
+
+Alternatively, choose **Other** in `/connect`, enter `junie` as the provider
+ID, and choose the Junie login method. After login, select models with
+`junie/<model-id>`.
+
+Pi and OpenCode keep separate credentials and bridge instances, so both hosts may
+run at the same time.
+
+For a local checkout, do not pass the Windows directory to `opencode plugin`.
+Add the plugin file to OpenCode's config instead:
+
+```json
+{
+  "plugin": [
+    "file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/opencode/index.mjs"
+  ]
+}
+```
+
+Put this in `%USERPROFILE%\.config\opencode\opencode.jsonc`, or in a project
+`opencode.jsonc` for project-only loading. Replace the path with the absolute
+location of your checkout and restart OpenCode, then authenticate with the
+command above.
 
 ## Features
 
@@ -24,6 +68,8 @@ Once authenticated, run `/model` to select a model provided by the junie bridge.
   all four model families: the bridge passes the backend's original overflow error
   through unchanged, so Pi's built-in detection recognises it (verified live against
   Claude, OpenAI, Grok and Gemini).
+- **OpenCode-native authentication and provider catalog** — browser OAuth, verified
+  model limits, family-specific routing, and best-effort balance toasts.
 
 ## Available Models
 
@@ -60,7 +106,10 @@ The list below is mostly in sync with the models Junie itself offers, as publish
 - `gemini-3.6-flash`
 
 Missing models:
-- **`deepseek-v4-flash`** — not implemented yet. JetBrains routes DeepSeek through a different backend (AliCloud), and every path/header combination tried so far is rejected by the Grazie gateway for subscription OAuth tokens.
+- **`deepseek-v4-flash`** — explicitly blacklisted. JetBrains routes DeepSeek through
+  AliCloud, and every path/header combination tried so far is rejected by the Grazie
+  gateway for subscription OAuth tokens. If the backend returns it, it appears only
+  in diagnostics and is hidden from both hosts.
 - **Older OpenAI generations** (`gpt-5-2025-08-07`, `gpt-5.3-codex`) — reachable, but deliberately left out in favour of the current GPT-5 models.
 - **`gpt`, `grok`, `gemini-pro`, `gemini-flash`** — stale aliases in that list; the backend answers `Model not found` for them.
 
@@ -99,6 +148,8 @@ The extension starts a local proxy server that translates between Pi and JetBrai
 - Grok models (`grok-*`) use the same Responses API, with the routing header that Junie uses for xAI
 - Gemini models (`gemini-*`) are forwarded to the Vertex-style `generateContent` endpoint
 - The proxy runs on an ephemeral port and shuts down when Pi exits
+- OpenCode starts and shuts down an independent ephemeral bridge for its host process
+- Runtime model refresh updates availability only; unknown backend IDs remain diagnostic-only
 
 ## Disclaimer
 

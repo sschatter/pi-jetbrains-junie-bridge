@@ -85,6 +85,12 @@ Found in `com/jetbrains/junie/activation/services/JBALogin.class`:
 
 ## Provider Routing (X-LLM-Model + path)
 
+The shared model catalog intentionally blacklists `deepseek-v4-flash`. Although
+the backend advertises it, it routes through AliCloud and returns an empty 404
+for normal subscription credentials, so it must not be selectable by either Pi
+or OpenCode. It may still be mentioned in diagnostics when returned by a future
+backend model refresh.
+
 Two independent things decide where a request goes: the `X-LLM-Model` header
 (from `LlmProvider`, mapped in `IngrazzioLLMAccessKt`) and the request path
 (`LLMAccess$Companion.defaultPathForRequest`). Both must match, or the gateway
