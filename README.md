@@ -63,6 +63,10 @@ command above.
   ![Screnshot showcasing balance tracking](./docs/balance_tracking.png)
 - **`/junie` command** — check proxy status, balance, and available models from within Pi
   ![Screnshot showcasing the `junie` command](./docs/junie_command.png)
+- **OpenCode `junie_status` tool and `/junie` command** — run `/junie` in OpenCode
+  to display balance, connectivity, proxy diagnostics, and backend models that are
+  unknown or explicitly blacklisted. The command is a prompt template that invokes
+  the tool, so it uses one normal agent turn rather than a direct TUI command.
 - **Automatic context compaction** — when a conversation outgrows the model's context
   window, Pi compacts it and retries instead of failing. This works out of the box for
   all four model families: the bridge passes the backend's original overflow error

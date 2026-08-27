@@ -49,5 +49,8 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.23"
   }
 }

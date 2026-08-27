@@ -1,5 +1,6 @@
 import { startJunieBridge, fetchBridgeJson } from "../lib/bridge.mjs";
-import { collectDiagnostics, formatBalanceToast } from "../lib/diagnostics.mjs";
+import { tool } from "@opencode-ai/plugin";
+import { collectDiagnostics, formatBalanceToast, formatDiagnosticsReport } from "../lib/diagnostics.mjs";
 import {
   KNOWN_GRAZIE_MODELS,
   MODEL_CLASSIFICATIONS,
@@ -98,6 +99,18 @@ export default async function JunieOpenCodePlugin(input) {
       .map((id) => [id, modelDescriptor(id, provider, bridge)]),
   );
 
+  const junieStatus = tool({
+    description: "Show Junie balance, connectivity, proxy diagnostics, and backend model classification.",
+    args: {},
+    async execute() {
+      if (!accessToken) {
+        return "Junie is not authenticated. Run the OpenCode connection flow first, then retry /junie.";
+      }
+      const diagnostics = await collectDiagnostics(bridge, accessToken, { connectivity: true });
+      return formatDiagnosticsReport(diagnostics);
+    },
+  });
+
   return {
     auth: {
       provider: PROVIDER_ID,
@@ -126,8 +139,16 @@ export default async function JunieOpenCodePlugin(input) {
         return models;
       },
     },
+    tool: {
+      junie_status: junieStatus,
+    },
     config: async (config) => {
       config.provider ??= {};
+      config.command ??= {};
+      config.command.junie ??= {
+        description: "Show JetBrains Junie balance, connectivity, proxy, and model diagnostics",
+        template: "Call the `junie_status` tool and present its complete result to me without changing it.",
+      };
       const provider = config.provider[PROVIDER_ID] ??= {
         name: PROVIDER_NAME,
         npm: "@ai-sdk/openai",
