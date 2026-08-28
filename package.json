@@ -17,6 +17,9 @@
   },
   "main": "./opencode/index.ts",
   "opencode": "./opencode/index.ts",
+  "bin": {
+    "junie-openai": "./bin/junie-openai.mjs"
+  },
   "keywords": [
     "pi",
     "pi-package",
@@ -41,6 +44,7 @@
   },
   "files": [
     "index.ts",
+    "bin/",
     "opencode/index.ts",
     "lib/",
     "opencode/",

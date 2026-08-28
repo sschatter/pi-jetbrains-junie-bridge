@@ -40,6 +40,45 @@ ID, and choose the Junie login method. After login, select models with
 Pi and OpenCode keep separate credentials and bridge instances, so both hosts may
 run at the same time.
 
+### Standalone OpenAI-compatible server
+
+The same bridge can be used by external OpenAI-compatible clients without Pi or
+OpenCode:
+
+```powershell
+npx junie-openai --port 8787
+```
+
+Authenticate once with the shared Junie browser login, then start the server:
+
+```powershell
+npx junie-openai login
+npx junie-openai --port 8787
+```
+
+The login stores a refreshable credential in the user profile (override its
+location with `JUNIE_OPENAI_CREDENTIALS`). Requests may still provide their own
+`Authorization: Bearer` header, which takes precedence over the saved login.
+
+The server listens on `127.0.0.1` by default. Set `JUNIE_HOST` or `JUNIE_PORT`, or
+pass `--host` and `--port`, to change that. Configure the client with base URL
+`http://127.0.0.1:8787/v1`. The server exposes `/v1/models`,
+`/v1/responses`, and `/v1/chat/completions`; Claude models use `/v1/messages`
+through the existing family-specific bridge routing. Use port `0` (the default)
+for an ephemeral port, which is printed when the server starts.
+
+The standalone server also exposes Junie diagnostics:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8787/junie/balance
+Invoke-RestMethod http://127.0.0.1:8787/junie/test
+```
+
+`/junie/balance` reports the license, monthly and top-up credit balances, quota,
+and account status. `/junie/test` checks connectivity through the configured
+proxy. These endpoints use the saved login automatically; otherwise provide an
+`Authorization: Bearer <Junie access token>` header.
+
 For a local checkout, do not pass the Windows directory to `opencode plugin`.
 Add the plugin file to OpenCode's config instead:
 
