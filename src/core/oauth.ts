@@ -38,6 +38,13 @@ function getJwtExpiresIn(token) {
   } catch { return undefined; }
 }
 
+export function junieCredentialsNeedRefresh(credentials) {
+  if (!credentials?.refresh) return false;
+  if (typeof credentials.expires === "number") return credentials.expires <= Date.now();
+  const expiresIn = getJwtExpiresIn(credentials.access);
+  return expiresIn !== undefined && expiresIn <= 0;
+}
+
 async function startCallbackServer(signal) {
   let resolveCallback, rejectCallback;
   const callbackPromise = new Promise((resolve, reject) => {

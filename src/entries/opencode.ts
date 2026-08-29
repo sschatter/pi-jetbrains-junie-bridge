@@ -15,10 +15,11 @@ import {
   MODEL_CLASSIFICATIONS,
   classifyModel,
 } from "../core/models.ts";
-import { junieLogin, junieRefreshToken } from "../core/oauth.ts";
+import { junieCredentialsNeedRefresh, junieLogin, junieRefreshToken } from "../core/oauth.ts";
 
 const PROVIDER_ID = "junie";
 const PROVIDER_NAME = "JetBrains Junie";
+type JunieCredentials = { access?: string; refresh?: string; expires?: number };
 
 function modelApi(id: string) {
   if (id.startsWith("claude-")) return { npm: "@ai-sdk/anthropic", id: "anthropic.messages" };
@@ -96,8 +97,16 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
   let accessToken: string | undefined;
   const turns = new Map<string, { startedAt: number; startingBalance?: number }>();
 
-  const rememberAccessToken = (credentials: { access?: string; refresh?: string } | undefined) => {
+  const rememberAccessToken = (credentials: JunieCredentials | undefined) => {
     if (credentials?.access) accessToken = credentials.access;
+    return credentials;
+  };
+
+  const refreshCredentialsIfNeeded = async (credentials: JunieCredentials | undefined) => {
+    if (!credentials || !junieCredentialsNeedRefresh(credentials)) return credentials;
+    const refreshed = await junieRefreshToken(credentials);
+    Object.assign(credentials, refreshed);
+    rememberAccessToken(credentials);
     return credentials;
   };
 
@@ -151,12 +160,14 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
       provider: PROVIDER_ID,
       methods: [oauthMethod()],
       async loader(auth) {
-        const credentials = rememberAccessToken(await auth() as { access?: string; refresh?: string });
+        const credentials = rememberAccessToken(await auth() as JunieCredentials);
+        await refreshCredentialsIfNeeded(credentials);
         return {
           apiKey: credentials?.access,
           refreshToken: async () => {
             if (!credentials?.refresh) return credentials;
-            return rememberAccessToken(await junieRefreshToken(credentials));
+            await refreshCredentialsIfNeeded(credentials);
+            return credentials;
           },
         };
       },
@@ -164,7 +175,7 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
     provider: {
       id: PROVIDER_ID,
       async models(provider, ctx) {
-        const credentials = ctx?.auth as { access?: string; refresh?: string } | undefined;
+        const credentials = ctx?.auth as JunieCredentials | undefined;
         rememberAccessToken(credentials);
         await refreshAvailability(credentials?.access);
         return Object.fromEntries(
