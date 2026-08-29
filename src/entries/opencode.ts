@@ -20,6 +20,8 @@ import { junieCredentialsNeedRefresh, junieLogin, junieRefreshToken } from "../c
 const PROVIDER_ID = "junie";
 const PROVIDER_NAME = "JetBrains Junie";
 type JunieCredentials = { access?: string; refresh?: string; expires?: number };
+const DIM = "\u001b[2m";
+const RESET_DIM = "\u001b[22m";
 
 export async function refreshJunieCredentials(credentials: JunieCredentials | undefined, force = false) {
   if (!credentials || (!force && !junieCredentialsNeedRefresh(credentials))) return credentials;
@@ -239,12 +241,13 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
           ? Math.max(0, turn.startingBalance - remaining)
           : undefined;
         if (turn) {
-          await printTurnResult(sessionID, formatTurnResult({
+          const result = formatTurnResult({
             durationMs: Date.now() - turn.startedAt,
             cost,
             remaining: monthlyRemaining ?? remaining,
             topUpRemaining,
-          }));
+          });
+          await printTurnResult(sessionID, `${DIM}${result}${RESET_DIM}`);
         }
         if (diagnostics.balance) {
           await input.client.tui?.showToast?.({
