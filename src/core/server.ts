@@ -261,13 +261,14 @@ function sendJson(res, status, data) {
 }
 
 function getAuthHeader(req) {
-  // The @google/genai SDK sends the key as x-goog-api-key, everything else as
-  // a bearer token in Authorization.
+  // The @google/genai SDK sends the key as x-goog-api-key, the @ai-sdk/anthropic
+  // SDK as x-api-key, and everything else as a bearer token in Authorization.
   const googleKey = req.headers["x-goog-api-key"];
-  if (!req.headers.authorization && typeof googleKey === "string") {
+  const auth = req.headers.authorization ?? req.headers["x-api-key"];
+  if (!auth && typeof googleKey === "string") {
     return `Bearer ${googleKey}`;
   }
-  if (req.headers.authorization) return req.headers.authorization;
+  if (auth) return typeof auth === "string" && auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`;
   if (typeof state.defaultAuthHeader === "function") return state.defaultAuthHeader();
   return state.defaultAuthHeader;
 }

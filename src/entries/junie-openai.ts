@@ -2,8 +2,8 @@
 
 import { startServer } from "../core/server.ts";
 import { junieLogin, junieRefreshToken } from "../core/oauth.ts";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { saveCredentialsFile, readCredentialsFile, refreshCredentialsFile } from "../core/credentials.ts";
+
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -14,7 +14,6 @@ function usage() {
 }
 
 type ServeOptions = { command: "serve" | "login"; host: string; port: number; verbose: boolean };
-type Credentials = { access: string; refresh?: string; expires?: number };
 
 function parseArgs(args: string[]): ServeOptions | undefined {
   const options: ServeOptions = { command: "serve", host: process.env.JUNIE_HOST ?? "127.0.0.1", port: Number(process.env.JUNIE_PORT ?? 0), verbose: false };
@@ -33,39 +32,15 @@ function parseArgs(args: string[]): ServeOptions | undefined {
   return options;
 }
 
-function credentialsPath() {
-  if (process.env.JUNIE_OPENAI_CREDENTIALS) return process.env.JUNIE_OPENAI_CREDENTIALS;
-  const base = process.env.APPDATA ?? join(process.env.HOME ?? process.env.USERPROFILE ?? ".", ".config");
-  return join(base, "junie-openai", "credentials.json");
-}
-
 function isLoopbackHost(host: string) {
   const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
-async function saveCredentials(credentials: Credentials) {
-  const file = credentialsPath();
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(credentials, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  if (process.platform !== "win32") await chmod(file, 0o600);
-  return file;
-}
-
 async function loadCredentials() {
-  try {
-    const credentials = JSON.parse(await readFile(credentialsPath(), "utf8"));
-    if (!credentials?.access) return undefined;
-    if (credentials.expires && credentials.expires <= Date.now() && credentials.refresh) {
-      const refreshed = await junieRefreshToken(credentials);
-      await saveCredentials(refreshed);
-      return refreshed;
-    }
-    return credentials;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-    throw new Error(`Could not read Junie credentials: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const credentials = await readCredentialsFile();
+  if (!credentials) return undefined;
+  return refreshCredentialsFile(credentials);
 }
 
 function openBrowser(url: string) {
@@ -88,7 +63,7 @@ async function login() {
         openBrowser(url);
       },
     });
-    const file = await saveCredentials(credentials);
+    const file = await saveCredentialsFile(credentials);
     console.log(`Junie login succeeded. Credentials saved to ${file}`);
   } finally {
     process.removeListener("SIGINT", abort);
@@ -125,7 +100,7 @@ export async function main(args = process.argv.slice(2)) {
           credentials.access = refreshed.access;
           credentials.refresh = refreshed.refresh;
           credentials.expires = refreshed.expires;
-          await saveCredentials(credentials);
+          await saveCredentialsFile(credentials);
         } catch (error) {
           if (options.verbose) console.error(`Junie token refresh failed: ${error instanceof Error ? error.message : String(error)}`);
         } finally {

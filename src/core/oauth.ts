@@ -175,7 +175,15 @@ export async function junieRefreshToken(credentials) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok) throw new Error(`Token refresh failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    // A failed refresh (e.g. a revoked/invalid refresh token) must not abort the
+    // caller — OpenCode invokes this on plugin load to proactively refresh stored
+    // credentials, and a thrown error there prevents the whole provider (and its
+    // models) from registering. Return the credentials we already have so the host
+    // can attempt the request and surface a real auth error / trigger re-login.
+    console.error(`[junie] token refresh failed: ${res.status} ${await res.text()}`);
+    return credentials;
+  }
 
   const data = await res.json();
 
