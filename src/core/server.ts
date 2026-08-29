@@ -267,7 +267,9 @@ function getAuthHeader(req) {
   if (!req.headers.authorization && typeof googleKey === "string") {
     return `Bearer ${googleKey}`;
   }
-  return req.headers.authorization ?? state.defaultAuthHeader;
+  if (req.headers.authorization) return req.headers.authorization;
+  if (typeof state.defaultAuthHeader === "function") return state.defaultAuthHeader();
+  return state.defaultAuthHeader;
 }
 
 async function pipeSSE(upstreamRes, res) {
@@ -635,11 +637,18 @@ async function handleConnTest(_req, res) {
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
-export async function startServer({ verbose = false, host = "127.0.0.1", port = 0, authToken }: { verbose?: boolean; host?: string; port?: number; authToken?: string } = {}) {
+export async function startServer({ verbose = false, host = "127.0.0.1", port = 0, authToken }: { verbose?: boolean; host?: string; port?: number; authToken?: string | (() => string | undefined) } = {}) {
   state.verbose = verbose;
-  state.defaultAuthHeader = typeof authToken === "string" && authToken.length > 0
-    ? (authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`)
-    : undefined;
+  state.defaultAuthHeader = typeof authToken === "function"
+    ? () => {
+      const token = authToken();
+      return typeof token === "string" && token.length > 0
+        ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`)
+        : undefined;
+    }
+    : typeof authToken === "string" && authToken.length > 0
+      ? (authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`)
+      : undefined;
 
   const server = createServer(async (req, res) => {
     if (req.method === "OPTIONS") {

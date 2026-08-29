@@ -39,6 +39,11 @@ function credentialsPath() {
   return join(base, "junie-openai", "credentials.json");
 }
 
+function isLoopbackHost(host: string) {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+}
+
 async function saveCredentials(credentials: Credentials) {
   const file = credentialsPath();
   await mkdir(dirname(file), { recursive: true });
@@ -104,7 +109,33 @@ export async function main(args = process.argv.slice(2)) {
     }
 
     const credentials = await loadCredentials();
-    const { server, port } = await startServer({ ...options, authToken: credentials?.access });
+    if (credentials?.access && !isLoopbackHost(options.host)) {
+      throw new Error("Refusing to bind a saved Junie login to a non-loopback host. Use a loopback host or remove the saved login and provide Authorization headers per request.");
+    }
+
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleCredentialRefresh = () => {
+      if (!credentials?.refresh) return;
+      const delay = credentials.expires
+        ? Math.max(1000, credentials.expires - Date.now() - 30_000)
+        : 15 * 60_000;
+      refreshTimer = setTimeout(async () => {
+        try {
+          const refreshed = await junieRefreshToken(credentials);
+          credentials.access = refreshed.access;
+          credentials.refresh = refreshed.refresh;
+          credentials.expires = refreshed.expires;
+          await saveCredentials(credentials);
+        } catch (error) {
+          if (options.verbose) console.error(`Junie token refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+          scheduleCredentialRefresh();
+        }
+      }, delay);
+      refreshTimer.unref?.();
+    };
+    const { server, port } = await startServer({ ...options, authToken: () => credentials?.access });
+    scheduleCredentialRefresh();
     const address = options.host.includes(":") && !options.host.startsWith("[")
       ? `[${options.host}]`
       : options.host;
@@ -113,7 +144,10 @@ export async function main(args = process.argv.slice(2)) {
       ? "Using the saved Junie login; an Authorization header may still override it."
       : "No saved login found; use an Authorization: Bearer <Junie access token> header or run 'junie-openai login'.");
 
-    const shutdown = () => server.close(() => process.exit(0));
+    const shutdown = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      server.close(() => process.exit(0));
+    };
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
   } catch (error) {

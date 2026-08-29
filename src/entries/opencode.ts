@@ -101,9 +101,9 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
     return credentials;
   };
 
-  const refreshAvailability = async () => {
+  const refreshAvailability = async (token = accessToken) => {
     try {
-      const { response, body } = await fetchBridgeJson(bridge, "/v1/models");
+      const { response, body } = await fetchBridgeJson(bridge, "/v1/models", { accessToken: token });
       if (response.ok && Array.isArray(body?.data)) {
         availability = new Set(body.data.map((model: { id?: string }) => model.id).filter(Boolean));
       }
@@ -164,8 +164,9 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
     provider: {
       id: PROVIDER_ID,
       async models(provider, ctx) {
-        await refreshAvailability();
-        rememberAccessToken(ctx?.auth as { access?: string; refresh?: string } | undefined);
+        const credentials = ctx?.auth as { access?: string; refresh?: string } | undefined;
+        rememberAccessToken(credentials);
+        await refreshAvailability(credentials?.access);
         return Object.fromEntries(
           KNOWN_GRAZIE_MODELS
             .filter((id) => classifyModel(id).status === MODEL_CLASSIFICATIONS.SUPPORTED && availability.has(id))
