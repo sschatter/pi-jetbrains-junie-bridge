@@ -12,11 +12,10 @@
     "server"
   ],
   "exports": {
-    ".": "./src/entries/opencode.ts",
+    ".": "./src/entries/junie-openai.ts",
     "./server": "./src/entries/opencode.ts"
   },
-  "main": "./src/entries/opencode.ts",
-  "opencode": "./src/entries/opencode.ts",
+  "main": "./src/entries/junie-openai.ts",
   "bin": {
     "junie-openai": "./src/entries/junie-openai.ts"
   },
