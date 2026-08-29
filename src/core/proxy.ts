@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * HTTP(S) proxy support with no external dependencies.
  *

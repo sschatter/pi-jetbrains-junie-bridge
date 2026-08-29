@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * JetBrains Junie OAuth PKCE flow — adapted for Pi's OAuthLoginCallbacks.
  *
@@ -7,7 +8,7 @@
 
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
-import { proxyFetch } from "./proxy.mjs";
+import { proxyFetch } from "./proxy.ts";
 
 const OAUTH = {
   tokenEndpoint: "https://oauth.account.jetbrains.com/oauth2/token",

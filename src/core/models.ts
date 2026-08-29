@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Junie model definitions for Pi extension provider registration.
  *

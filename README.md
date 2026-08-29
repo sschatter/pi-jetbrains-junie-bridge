@@ -85,7 +85,7 @@ Add the plugin file to OpenCode's config instead:
 ```json
 {
   "plugin": [
-    "file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/opencode/index.ts"
+    "file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/src/entries/opencode.ts"
   ]
 }
 ```
@@ -174,7 +174,7 @@ You can verify the active proxy with the `/junie` command inside Pi.
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22.18.0+
 - A [JetBrains Junie subscription](https://junie.jetbrains.com/)
 
 

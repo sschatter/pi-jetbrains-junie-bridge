@@ -6,13 +6,13 @@ import type {
   ThemeColor,
 } from "@earendil-works/pi-coding-agent";
 import { createRequire } from "node:module";
-import { startServer } from "./lib/server.mjs";
-import { junieLogin, junieRefreshToken } from "./lib/oauth.mjs";
-import { buildProviderModels, cleanOldModelsJson } from "./lib/models.mjs";
-import { getProxyDiagnostics } from "./lib/proxy.mjs";
+import { startServer } from "../core/server.ts";
+import { junieLogin, junieRefreshToken } from "../core/oauth.ts";
+import { buildProviderModels, cleanOldModelsJson } from "../core/models.ts";
+import { getProxyDiagnostics } from "../core/proxy.ts";
 
 const require = createRequire(import.meta.url);
-const { version: PLUGIN_VERSION } = require("./package.json");
+const { version: PLUGIN_VERSION } = require("../../package.json");
 
 /** A run of text with one style — styling is applied after wrapping, so that
  *  the ANSI escapes never confuse the width arithmetic. */
@@ -202,7 +202,7 @@ export default async function (pi: ExtensionAPI) {
       ...buildProviderModels("claude", port),
       ...buildProviderModels("grok", port),
       ...buildProviderModels("gemini", port),
-    ],
+    ] as any,
   });
 
   // Balance tracking after each turn

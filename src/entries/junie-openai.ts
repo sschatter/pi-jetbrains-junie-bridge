@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { startServer } from "../lib/server.mjs";
-import { junieLogin, junieRefreshToken } from "../lib/oauth.mjs";
+import { startServer } from "../core/server.ts";
+import { junieLogin, junieRefreshToken } from "../core/oauth.ts";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
@@ -13,8 +13,11 @@ function usage() {
   console.error("  Run 'junie-openai login' to authenticate with Junie in your browser.");
 }
 
-function parseArgs(args) {
-  const options = { command: "serve", host: process.env.JUNIE_HOST ?? "127.0.0.1", port: Number(process.env.JUNIE_PORT ?? 0), verbose: false };
+type ServeOptions = { command: "serve" | "login"; host: string; port: number; verbose: boolean };
+type Credentials = { access: string; refresh?: string; expires?: number };
+
+function parseArgs(args: string[]): ServeOptions | undefined {
+  const options: ServeOptions = { command: "serve", host: process.env.JUNIE_HOST ?? "127.0.0.1", port: Number(process.env.JUNIE_PORT ?? 0), verbose: false };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "login") options.command = "login";
@@ -36,7 +39,7 @@ function credentialsPath() {
   return join(base, "junie-openai", "credentials.json");
 }
 
-async function saveCredentials(credentials) {
+async function saveCredentials(credentials: Credentials) {
   const file = credentialsPath();
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(credentials, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -55,12 +58,12 @@ async function loadCredentials() {
     }
     return credentials;
   } catch (error) {
-    if (error?.code === "ENOENT") return undefined;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
     throw new Error(`Could not read Junie credentials: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function openBrowser(url) {
+function openBrowser(url: string) {
   const command = process.platform === "win32" ? "rundll32"
     : process.platform === "darwin" ? "open" : "xdg-open";
   const args = process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
@@ -75,7 +78,7 @@ async function login() {
   try {
     const credentials = await junieLogin({
       signal: controller.signal,
-      onAuth: ({ url }) => {
+      onAuth: ({ url }: { url: string }) => {
         console.log(`Opening Junie login in your browser: ${url}`);
         openBrowser(url);
       },
@@ -87,9 +90,9 @@ async function login() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export async function main(args = process.argv.slice(2)) {
   try {
-    const options = parseArgs(process.argv.slice(2));
+    const options = parseArgs(args);
     if (!options) {
       usage();
       process.exit(0);
@@ -118,4 +121,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     usage();
     process.exit(1);
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }

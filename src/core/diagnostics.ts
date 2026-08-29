@@ -1,5 +1,6 @@
-import { fetchBridgeJson } from "./bridge.mjs";
-import { classifyBackendModels } from "./models.mjs";
+// @ts-nocheck
+import { fetchBridgeJson } from "./bridge.ts";
+import { classifyBackendModels } from "./models.ts";
 
 /**
  * Collect operational data concurrently. Callers decide whether to render it

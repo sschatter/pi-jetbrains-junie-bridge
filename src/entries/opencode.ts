@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
 import type { Config, Hooks, PluginInput } from "@opencode-ai/plugin";
-import { startJunieBridge, fetchBridgeJson } from "../lib/bridge.mjs";
+import { startJunieBridge, fetchBridgeJson } from "../core/bridge.ts";
 import {
   availableCredits,
   collectDiagnostics,
@@ -9,13 +9,13 @@ import {
   formatTurnResult,
   monthlyAvailableCredits,
   topUpAvailableCredits,
-} from "../lib/diagnostics.mjs";
+} from "../core/diagnostics.ts";
 import {
   KNOWN_GRAZIE_MODELS,
   MODEL_CLASSIFICATIONS,
   classifyModel,
-} from "../lib/models.mjs";
-import { junieLogin, junieRefreshToken } from "../lib/oauth.mjs";
+} from "../core/models.ts";
+import { junieLogin, junieRefreshToken } from "../core/oauth.ts";
 
 const PROVIDER_ID = "junie";
 const PROVIDER_NAME = "JetBrains Junie";
@@ -237,7 +237,7 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
         // Status reporting is best-effort and must not affect model requests.
       }
     },
-    dispose: async () => bridge.close(),
+    dispose: async () => { await bridge.close(); },
   };
 }
 

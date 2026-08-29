@@ -5,20 +5,20 @@
   "type": "module",
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./src/entries/pi.ts"
     ]
   },
   "oc-plugin": [
     "server"
   ],
   "exports": {
-    ".": "./opencode/index.ts",
-    "./server": "./opencode/index.ts"
+    ".": "./src/entries/opencode.ts",
+    "./server": "./src/entries/opencode.ts"
   },
-  "main": "./opencode/index.ts",
-  "opencode": "./opencode/index.ts",
+  "main": "./src/entries/opencode.ts",
+  "opencode": "./src/entries/opencode.ts",
   "bin": {
-    "junie-openai": "./bin/junie-openai.mjs"
+    "junie-openai": "./src/entries/junie-openai.ts"
   },
   "keywords": [
     "pi",
@@ -40,20 +40,21 @@
   },
   "homepage": "https://github.com/sschatter/pi-jetbrains-junie-bridge#readme",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18.0"
   },
   "files": [
-    "index.ts",
-    "bin/",
-    "opencode/index.ts",
-    "lib/",
-    "opencode/",
+    "src/",
     "docs/",
     "README.md"
   ],
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "*",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.18.23"

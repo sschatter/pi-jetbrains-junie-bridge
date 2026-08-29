@@ -1,7 +1,11 @@
-import { startServer } from "./server.mjs";
+// The core modules intentionally preserve the dynamically shaped wire data of
+// the original JavaScript implementation; consumers add boundary types where
+// the host APIs require them.
+// @ts-nocheck
+import { startServer } from "./server.ts";
 
 /** Start one isolated local bridge for a host adapter. */
-export async function startJunieBridge(options) {
+export async function startJunieBridge(options?) {
   const { server, port } = await startServer(options);
   const baseUrl = `http://127.0.0.1:${port}`;
 

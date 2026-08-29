@@ -1,6 +1,7 @@
+// @ts-nocheck
 import { createServer } from "node:http";
-import { KNOWN_GRAZIE_MODELS, classifyBackendModels, classifyModel, MODEL_CLASSIFICATIONS } from "./models.mjs";
-import { proxyFetch, getProxyDiagnostics } from "./proxy.mjs";
+import { KNOWN_GRAZIE_MODELS, classifyBackendModels, classifyModel, MODEL_CLASSIFICATIONS } from "./models.ts";
+import { proxyFetch, getProxyDiagnostics } from "./proxy.ts";
 
 // ─── Upstream Config ─────────────────────────────────────────────────────────
 const UPSTREAM_BASE = "https://ingrazzio-cloud-prod.labs.jb.gg";
@@ -634,7 +635,7 @@ async function handleConnTest(_req, res) {
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
-export async function startServer({ verbose = false, host = "127.0.0.1", port = 0, authToken } = {}) {
+export async function startServer({ verbose = false, host = "127.0.0.1", port = 0, authToken }: { verbose?: boolean; host?: string; port?: number; authToken?: string } = {}) {
   state.verbose = verbose;
   state.defaultAuthHeader = typeof authToken === "string" && authToken.length > 0
     ? (authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`)
