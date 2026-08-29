@@ -21,6 +21,13 @@ const PROVIDER_ID = "junie";
 const PROVIDER_NAME = "JetBrains Junie";
 type JunieCredentials = { access?: string; refresh?: string; expires?: number };
 
+export async function refreshJunieCredentials(credentials: JunieCredentials | undefined, force = false) {
+  if (!credentials || (!force && !junieCredentialsNeedRefresh(credentials))) return credentials;
+  const refreshed = await junieRefreshToken(credentials);
+  Object.assign(credentials, refreshed);
+  return credentials;
+}
+
 function modelApi(id: string) {
   if (id.startsWith("claude-")) return { npm: "@ai-sdk/anthropic", id: "anthropic.messages" };
   if (id.startsWith("gemini-")) return { npm: "@ai-sdk/google", id: "google.generative-ai" };
@@ -103,11 +110,9 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
   };
 
   const refreshCredentialsIfNeeded = async (credentials: JunieCredentials | undefined) => {
-    if (!credentials || !junieCredentialsNeedRefresh(credentials)) return credentials;
-    const refreshed = await junieRefreshToken(credentials);
-    Object.assign(credentials, refreshed);
+    const refreshed = await refreshJunieCredentials(credentials);
     rememberAccessToken(credentials);
-    return credentials;
+    return refreshed;
   };
 
   const refreshAvailability = async (token = accessToken) => {
@@ -166,8 +171,9 @@ export default async function JunieOpenCodePlugin(input: PluginInput): Promise<H
           apiKey: credentials?.access,
           refreshToken: async () => {
             if (!credentials?.refresh) return credentials;
-            await refreshCredentialsIfNeeded(credentials);
-            return credentials;
+            const refreshed = await refreshJunieCredentials(credentials, true);
+            rememberAccessToken(refreshed);
+            return refreshed;
           },
         };
       },
