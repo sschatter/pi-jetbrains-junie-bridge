@@ -341,7 +341,7 @@ export function translateOpenAIToAnthropic(payload: OpenAIChatPayload): JsonReco
           content.push({ type: "tool_use", id: tc.id, name: tc.function?.name, input });
         }
       }
-      messages.push({ role: "assistant", content: content.length ? content : "" });
+      messages.push({ role: "assistant", content: content.length ? content : [] });
     }
   }
 
@@ -457,6 +457,7 @@ export function translateAnthropicToOpenAI(resp: AnthropicResponse, model: strin
 export function translateOpenAIToGoogle(payload: OpenAIChatPayload): { method: string; body: JsonRecord } {
   const systemParts: string[] = [];
   const contents: JsonRecord[] = [];
+  const toolCallIdToName = new Map<string, string>();
 
   for (const msg of payload.messages ?? []) {
     const role = msg.role;
@@ -470,7 +471,7 @@ export function translateOpenAIToGoogle(payload: OpenAIChatPayload): { method: s
       continue;
     }
     if (role === "tool") {
-      const name = msg.name ?? "tool";
+      const name = msg.name ?? (msg.tool_call_id ? toolCallIdToName.get(msg.tool_call_id) : undefined) ?? msg.tool_call_id ?? "tool";
       contents.push({
         role: "user",
         parts: [{ functionResponse: { name, response: { result: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) } } }],
@@ -484,6 +485,7 @@ export function translateOpenAIToGoogle(payload: OpenAIChatPayload): { method: s
       if (Array.isArray(msg.tool_calls)) for (const tc of msg.tool_calls) {
         let args: unknown = {};
         try { args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { args = {}; }
+        if (tc.id && tc.function?.name) toolCallIdToName.set(tc.id, tc.function.name);
         parts.push({ functionCall: { name: tc.function?.name, args } });
       }
       contents.push({ role: "model", parts });

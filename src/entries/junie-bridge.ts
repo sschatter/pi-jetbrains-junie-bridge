@@ -21,8 +21,14 @@ function parseArgs(args: string[]): ServeOptions | undefined {
     const arg = args[i];
     if (arg === "login") options.command = "login";
     else if (arg === "--verbose") options.verbose = true;
-    else if (arg === "--host") options.host = args[++i];
-    else if (arg === "--port") options.port = Number(args[++i]);
+    else if (arg === "--host") {
+      if (i + 1 >= args.length) throw new Error("Missing value for --host");
+      options.host = args[++i];
+    }
+    else if (arg === "--port") {
+      if (i + 1 >= args.length) throw new Error("Missing value for --port");
+      options.port = Number(args[++i]);
+    }
     else if (arg === "--help" || arg === "-h") return undefined;
     else throw new Error(`Unknown option: ${arg}`);
   }
