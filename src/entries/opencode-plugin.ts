@@ -259,23 +259,22 @@ export function makeJuniePlugin(family: Family) {
         if (!sessionID) return;
         const turn = turns.get(sessionID);
         turns.delete(sessionID);
+        if (!turn) return;
         try {
           const diagnostics = await collectDiagnostics(bridge, accessToken);
           const remaining = availableCredits(diagnostics.balance);
           const monthlyRemaining = monthlyAvailableCredits(diagnostics.balance);
           const topUpRemaining = topUpAvailableCredits(diagnostics.balance);
-          const cost = turn?.startingBalance !== undefined && remaining !== undefined
+          const cost = turn.startingBalance !== undefined && remaining !== undefined
             ? Math.max(0, turn.startingBalance - remaining)
             : undefined;
-          if (turn) {
-            const result = formatTurnResult({
-              durationMs: Date.now() - turn.startedAt,
-              cost,
-              remaining: monthlyRemaining ?? remaining,
-              topUpRemaining,
-            });
-            await printTurnResult(sessionID, `${DIM}${result}${RESET_DIM}`);
-          }
+          const result = formatTurnResult({
+            durationMs: Date.now() - turn.startedAt,
+            cost,
+            remaining: monthlyRemaining ?? remaining,
+            topUpRemaining,
+          });
+          await printTurnResult(sessionID, `${DIM}${result}${RESET_DIM}`);
           if (diagnostics.balance) {
             await input.client.tui?.showToast?.({
               body: { message: formatBalanceToast(diagnostics.balance), variant: "info" },
