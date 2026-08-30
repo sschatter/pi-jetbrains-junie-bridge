@@ -1,5 +1,5 @@
-import { makeJuniePlugin } from "./junie-plugin.ts";
+import { makeJuniePlugin } from "./opencode-plugin.ts";
 
-export { refreshJunieCredentials } from "./junie-plugin.ts";
+export { refreshJunieCredentials } from "./opencode-plugin.ts";
 
 export default makeJuniePlugin("openai");

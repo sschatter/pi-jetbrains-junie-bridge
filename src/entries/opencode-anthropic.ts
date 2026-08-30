@@ -1,3 +1,3 @@
-import { makeJuniePlugin } from "./junie-plugin.ts";
+import { makeJuniePlugin } from "./opencode-plugin.ts";
 
 export default makeJuniePlugin("anthropic");
