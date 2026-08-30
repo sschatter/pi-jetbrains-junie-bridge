@@ -197,6 +197,10 @@ The extension starts a local proxy server that translates between Pi and JetBrai
 - OpenCode starts and shuts down an independent ephemeral bridge for its host process
 - Runtime model refresh updates availability only; unknown backend IDs remain diagnostic-only
 
+## Testing
+
+See [`docs/testing.md`](./docs/testing.md) for how to verify the Pi extension (`--extension` vs `pi install`), the three OpenCode providers (`junie-openai`/`junie-google`/`junie-anthropic`), and the standalone `junie-bridge` server (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`) — including the `provider`/`model` two-column `pi --list-models` table (grep for `junie`).
+
 ## Disclaimer
 
 This extension includes a proxy server reverse-engineered from the official [JetBrains Junie CLI](https://github.com/JetBrains/junie).

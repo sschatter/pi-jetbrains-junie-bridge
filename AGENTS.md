@@ -3,8 +3,7 @@ When testing authentication bugs for the OpenCode plugin, you must run opencode 
 
 Auth is NOT stored in OpenCode's auth store. The plugin reads JetBrains Junie OAuth credentials
 from a shared file (`$JUNIE_BRIDGE_CREDENTIALS`, else
-`%APPDATA%/junie-bridge/credentials.json` / `~/.config/junie-bridge/credentials.json`; legacy
-`$JUNIE_OPENAI_CREDENTIALS` / `junie-openai/` paths are still read as a fallback) — the same
+`%APPDATA%/junie-bridge/credentials.json` / `~/.config/junie-bridge/credentials.json`) — the same
 file the `junie-bridge` server uses. If the file is missing or the refresh token is dead, the
 plugin opens the browser itself and runs the one-time Junie login, then saves to that file.
 A single login covers all three providers. Run `junie-bridge login` manually, or let the plugin
