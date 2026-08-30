@@ -56,7 +56,7 @@ async function startCallbackServer(signal?: AbortSignal) {
     rejectCallback = reject;
   });
 
-  const server = createServer((req, res) => {
+  const handler = (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const code = url.searchParams.get("code");
     const reqState = url.searchParams.get("state");
@@ -76,30 +76,51 @@ async function startCallbackServer(signal?: AbortSignal) {
     }
     res.writeHead(404);
     res.end();
-  });
+  };
+
+  let activeServer: ReturnType<typeof createServer> | undefined;
 
   // Respect abort signal
   if (signal) {
     signal.addEventListener("abort", () => {
       rejectCallback(new Error("Login aborted"));
-      server.close();
+      activeServer?.close();
     }, { once: true });
   }
 
-  const port = await new Promise<number>((resolve, reject) => {
-    let current = OAUTH.callbackPortStart;
-    const tryPort = () => {
-      if (current > OAUTH.callbackPortEnd) {
-        reject(new Error(`Cannot start OAuth callback server on ports ${OAUTH.callbackPortStart}-${OAUTH.callbackPortEnd}`));
-        return;
-      }
-      server.once("error", () => { current++; tryPort(); });
-      server.listen(current, "localhost", () => resolve(current));
-    };
-    tryPort();
-  });
+  let port: number | undefined;
+  let lastError: unknown;
+  for (let current = OAUTH.callbackPortStart; current <= OAUTH.callbackPortEnd; current++) {
+    const server = createServer(handler);
+    activeServer = server;
+    const result = await new Promise<number | null>((resolve) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {
+          server.close(() => resolve(null));
+        } else {
+          lastError = err;
+          server.close(() => resolve(null));
+        }
+      };
+      server.once("error", onError);
+      server.listen(current, "localhost", () => {
+        server.removeListener("error", onError);
+        resolve(current);
+      });
+    });
+    if (result !== null && lastError === undefined) {
+      port = result;
+      break;
+    }
+    if (lastError) break;
+  }
 
-  return { server, port, waitForCallback: () => callbackPromise };
+  if (port === undefined) {
+    if (lastError) throw lastError;
+    throw new Error(`Cannot start OAuth callback server on ports ${OAUTH.callbackPortStart}-${OAUTH.callbackPortEnd}`);
+  }
+
+  return { server: activeServer!, port, waitForCallback: () => callbackPromise };
 }
 
 function buildAuthUrl(port: number, codeChallenge: string, authState: string) {
