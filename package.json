@@ -48,6 +48,7 @@
   ],
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",
+    "junie-bridge": "node src/entries/junie-bridge.ts",
     "test": "vitest run"
   },
   "devDependencies": {

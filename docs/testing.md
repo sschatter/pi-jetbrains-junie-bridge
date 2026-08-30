@@ -109,7 +109,9 @@ opencode plugin pi-jetbrains-junie-bridge  # then restart opencode
 opencode auth login --provider junie-openai
 # or inside opencode: /connect -> Other -> junie-openai -> Junie login
 # alternative manual one-time login (writes the shared file):
-npx junie-bridge login
+npx junie-bridge login                        # published package
+npm run junie-bridge -- login                 # local checkout (package.json:scripts.junie-bridge, no publish needed)
+# also: node --run junie-bridge login        # npm 10.2+ shorthand
 
 # verify bridge + models (requires the file or a per-request Authorization header):
 npx opencode run -m junie-openai/openai-gpt-5-2 "say hello in one word: hi"
@@ -129,15 +131,18 @@ Same `src/core/server.ts` bridge, no Pi/OpenCode TUI needed. Accepts per-request
 
 ```powershell
 # one-time login (writes %APPDATA%\junie-bridge\credentials.json):
-npx junie-bridge login
+npx junie-bridge login                        # published package
+npm run junie-bridge -- login                 # local checkout (package.json:scripts.junie-bridge)
+# also: node --run junie-bridge login
 
 # start (ephemeral port by default, printed on stdout; use --port 0 explicitly if you want):
-npx junie-bridge --port 8787
+npx junie-bridge --port 8787                  # published
+npm run junie-bridge -- --port 8787           # local checkout
 # or loopback override:
-npx junie-bridge --host 127.0.0.1 --port 0 --verbose
+npm run junie-bridge -- --host 127.0.0.1 --port 0 --verbose
 
 # with env overrides:
-$env:JUNIE_PORT=8787; $env:JUNIE_HOST="127.0.0.1"; npx junie-bridge
+$env:JUNIE_PORT=8787; $env:JUNIE_HOST="127.0.0.1"; npm run junie-bridge
 
 # quick probes (use the printed port; 8787 in examples):
 Invoke-RestMethod http://127.0.0.1:8787/v1/models
