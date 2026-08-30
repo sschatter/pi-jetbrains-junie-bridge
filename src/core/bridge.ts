@@ -19,7 +19,11 @@ export async function startJunieBridge(options?: StartServerOptions): Promise<Ju
     baseUrl,
     close(): Promise<void> {
       return new Promise((resolve, reject) => {
-        server.close((error?: Error) => (error ? reject(error) : resolve()));
+        server.close((error?: Error & { code?: string }) => {
+          if (error && (error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") resolve();
+          else if (error) reject(error);
+          else resolve();
+        });
       });
     },
   };

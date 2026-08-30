@@ -14,6 +14,7 @@ import {
   KNOWN_GRAZIE_MODELS,
   MODEL_CLASSIFICATIONS,
   classifyModel,
+  getModelMeta,
 } from "../core/models.ts";
 import { junieCredentialsNeedRefresh, junieRefreshToken } from "../core/oauth.ts";
 import {
@@ -108,11 +109,22 @@ export function makeJuniePlugin(family: Family) {
       spawn(command, args, { detached: true, stdio: "ignore" }).unref?.();
     };
     let loginInFlight: Promise<JunieCredentialFile | undefined> | undefined;
-    const triggerLogin = () =>
-      (loginInFlight ??= ensureJunieCredentials(openBrowser).finally(() => { loginInFlight = undefined; }));
+    const triggerLogin = () => {
+      if (!loginInFlight) {
+        loginInFlight = ensureJunieCredentials(openBrowser).finally(() => {
+          loginInFlight = undefined;
+        });
+      }
+      return loginInFlight;
+    };
     const readCreds = async () => {
       const file = await readCredentialsFile();
       return file?.access ? refreshCredentialsFile(file) : undefined;
+    };
+
+    const getLimits = (id: string) => {
+      const meta = getModelMeta(id);
+      return { context: meta.contextWindow, output: meta.maxTokens };
     };
 
     const buildModels = (baseURL: string): Record<string, ModelV2> => {
@@ -121,8 +133,7 @@ export function makeJuniePlugin(family: Family) {
         if (!cfg.match(id)) continue;
         if (classifyModel(id).status !== MODEL_CLASSIFICATIONS.SUPPORTED) continue;
         if (availability.size > 0 && !availability.has(id)) continue;
-        const context = id.startsWith("grok-4-5") ? 500000 : id.startsWith("gemini-") ? 1048576 : id.startsWith("claude-") ? 1000000 : id === "openai-gpt-5-2" ? 400000 : 1000000;
-        const output = id.startsWith("claude-") ? 128000 : id.startsWith("gemini-") ? 65536 : 32768;
+        const { context, output } = getLimits(id);
         const api = modelApi(id);
         entries[id] = {
           id,
@@ -154,8 +165,7 @@ export function makeJuniePlugin(family: Family) {
       for (const id of KNOWN_GRAZIE_MODELS) {
         if (!cfg.match(id)) continue;
         if (classifyModel(id).status !== MODEL_CLASSIFICATIONS.SUPPORTED) continue;
-        const context = id.startsWith("grok-4-5") ? 500000 : id.startsWith("gemini-") ? 1048576 : id.startsWith("claude-") ? 1000000 : id === "openai-gpt-5-2" ? 400000 : 1000000;
-        const output = id.startsWith("claude-") ? 128000 : id.startsWith("gemini-") ? 65536 : 32768;
+        const { context, output } = getLimits(id);
         const api = modelApi(id);
         entries[id] = {
           id,

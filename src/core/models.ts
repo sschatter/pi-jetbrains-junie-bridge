@@ -121,7 +121,7 @@ const PREFIX_DEFAULTS: Record<string, { reasoning: boolean; contextWindow: numbe
   "gemini-":   { reasoning: true,  contextWindow: 1048576, maxTokens: 65536 },
 };
 
-function getModelMeta(id: string) {
+export function getModelMeta(id: string) {
   if (MODEL_METADATA[id]) return MODEL_METADATA[id];
   for (const [prefix, defaults] of Object.entries(PREFIX_DEFAULTS)) {
     if (id.startsWith(prefix)) return defaults;

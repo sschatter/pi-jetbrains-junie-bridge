@@ -88,15 +88,30 @@ function toHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
 /** Request over an already-established tunnel, resolved as a fetch Response. */
 function requestOverSocket(socket: Socket, target: URL, options: RequestInit): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const rawBody: BodyInit | null | undefined = options.body as BodyInit | null | undefined;
-    const body = rawBody == null ? null
-      : typeof rawBody === "string" ? rawBody
-      : rawBody instanceof URLSearchParams ? rawBody.toString()
-      : String(rawBody); // URLSearchParams and friends
+    const rawBody: unknown = options.body as unknown;
+    let body: Buffer | null = null;
+    if (rawBody == null) {
+      body = null;
+    } else if (typeof rawBody === "string") {
+      body = Buffer.from(rawBody);
+    } else if (rawBody instanceof URLSearchParams) {
+      body = Buffer.from(rawBody.toString());
+    } else if (Buffer.isBuffer(rawBody)) {
+      body = rawBody;
+    } else if (rawBody instanceof Uint8Array) {
+      body = Buffer.from(rawBody);
+    } else if (rawBody instanceof ArrayBuffer) {
+      body = Buffer.from(rawBody);
+    } else if (ArrayBuffer.isView(rawBody)) {
+      const view = rawBody as ArrayBufferView;
+      body = Buffer.from(view.buffer, view.byteOffset, view.byteLength);
+    } else {
+      body = Buffer.from(String(rawBody));
+    }
 
     const headers: Record<string, string> = { ...(options.headers as Record<string, string> | undefined ?? {}) };
     if (body !== null && !Object.keys(headers).some((h) => h.toLowerCase() === "content-length")) {
-      headers["Content-Length"] = String(Buffer.byteLength(body));
+      headers["Content-Length"] = String(body.length);
     }
 
     const req = httpsRequest({
