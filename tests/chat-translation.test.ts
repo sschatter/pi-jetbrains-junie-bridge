@@ -118,7 +118,7 @@ describe("translateOpenAIToGoogle", () => {
     expect(body.systemInstruction).toEqual({ parts: [{ text: "sys" }] });
     expect(body.contents[0]).toEqual({ role: "user", parts: [{ text: "hi" }] });
     expect(body.contents[1]).toEqual({ role: "model", parts: [{ functionCall: { name: "f", args: {} } }] });
-    expect(body.contents[2]).toEqual({ role: "user", parts: [{ functionResponse: { name: "tool", response: { result: "ok" } } }] });
+    expect(body.contents[2]).toEqual({ role: "user", parts: [{ functionResponse: { name: "f", response: { result: "ok" } } }] });
     expect(body.tools[0].functionDeclarations[0].name).toBe("f");
     expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: "ANY" } });
   });
