@@ -852,19 +852,12 @@ function getAuthHeader(req: IncomingMessage): string | undefined {
   // No saved login — fall back to per-request headers for ephemeral bridges.
   // The @google/genai SDK sends the key as x-goog-api-key, the @ai-sdk/anthropic
   // SDK as x-api-key, and everything else as a bearer token in Authorization.
-  const googleKey = req.headers["x-goog-api-key"];
-  const auth = (req.headers.authorization ?? req.headers["x-api-key"]) as string | string[] | undefined;
-  const authStr = Array.isArray(auth) ? auth[0] : auth;
-  if (!authStr && typeof googleKey === "string") {
-    return `Bearer ${googleKey}`;
-  }
-  if (typeof googleKey === "string" && Array.isArray(googleKey)) {
-    // unreachable, but keep for type safety
-  }
-  if (authStr) return typeof authStr === "string" && authStr.startsWith("Bearer ") ? authStr : `Bearer ${authStr}`;
-  if (!authStr && typeof googleKey === "string") {
-    return `Bearer ${googleKey}`;
-  }
+  const googleKeyRaw = req.headers["x-goog-api-key"] as string | string[] | undefined;
+  const googleKey = Array.isArray(googleKeyRaw) ? googleKeyRaw[0] : googleKeyRaw;
+  const authRaw = (req.headers.authorization ?? req.headers["x-api-key"]) as string | string[] | undefined;
+  const authStr = Array.isArray(authRaw) ? authRaw[0] : authRaw;
+  if (authStr) return authStr.startsWith("Bearer ") ? authStr : `Bearer ${authStr}`;
+  if (typeof googleKey === "string" && googleKey) return `Bearer ${googleKey}`;
   return undefined;
 }
 
