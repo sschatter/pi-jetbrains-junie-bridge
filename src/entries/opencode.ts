@@ -1,11 +1,7 @@
 /**
- * Combined OpenCode entry for npm publish.
- * The three file-entries (opencode-openai/google/anthropic) are the
- * local-dev path (file:// in opencode.jsonc) and work today.
- * The published npm path `opencode plugin pi-jetbrains-junie-bridge` only
- * resolves a single `exports["./server"]` entry, so this module re-exports
- * the three family plugins as enumerated exports. The legacy v0 loader
- * enumerates named exports as separate plugins.
+ * OpenCode entry for npm publish (and local `file://` dir plugin).
+ * Re-exports the three family plugins as enumerated exports; the legacy v0
+ * loader enumerates named exports as separate plugins.
  */
 import { makeJuniePlugin } from "./opencode-plugin.ts";
 

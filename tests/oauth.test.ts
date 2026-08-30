@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as oauth from "../src/core/oauth.ts";
-import { refreshJunieCredentials } from "../src/entries/opencode-openai.ts";
+import { refreshJunieCredentials } from "../src/entries/opencode-plugin.ts";
 
 vi.mock("../src/core/oauth.ts", async () => {
   const actual = await vi.importActual<typeof import("../src/core/oauth.ts")>("../src/core/oauth.ts");

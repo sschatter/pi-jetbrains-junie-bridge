@@ -1,6 +1,6 @@
 # Testing the Plugins
 
-This doc covers local verification of the three surfaces in this repo: the Pi extension (`src/entries/pi.ts`), the three OpenCode plugins (`src/entries/opencode-*.ts`), and the standalone OpenAI-compatible server (`src/entries/junie-bridge.ts` / `src/core/server.ts`).
+This doc covers local verification of the three surfaces in this repo: the Pi extension (`src/entries/pi.ts`), the OpenCode plugin (`src/entries/opencode.ts` via `src/entries/opencode-plugin.ts`), and the standalone OpenAI-compatible server (`src/entries/junie-bridge.ts` / `src/core/server.ts`).
 
 All commands below assume PowerShell on Windows and this checkout at `C:\Users\MyUser\IdeaProjects\junie-bridge`.
 
@@ -88,9 +88,9 @@ npx pi remove junie-bridge
 - `Model "junie/openai-gpt-5-2" not found.` → extension not loaded (missing `--extension` or not installed).
 - `Select-String "junie/openai"` returns nothing → expected; table has no slash. Use `Select-String junie`.
 
-## OpenCode plugins (three providers)
+## OpenCode plugin (three providers)
 
-The package exports three sibling plugins on equal footing (`AGENTS.md`): `junie-openai` (`@ai-sdk/openai`, `${bridge}/v1`), `junie-google` (`@ai-sdk/google`, `${bridge}/google/v1beta`), `junie-anthropic` (`@ai-sdk/anthropic`, `${bridge}/v1`). Registered in `src/entries/opencode-*.ts` via `src/entries/opencode-plugin.ts:34-53`.
+The plugin registers three sibling providers on equal footing (`AGENTS.md`): `junie-openai` (`@ai-sdk/openai`, `${bridge}/v1`), `junie-google` (`@ai-sdk/google`, `${bridge}/google/v1beta`), `junie-anthropic` (`@ai-sdk/anthropic`, `${bridge}/v1`). Registered in `src/entries/opencode.ts:12-14` via `src/entries/opencode-plugin.ts:34-53`.
 
 Auth is **not** in OpenCode's auth store. The plugin reads/writes `%APPDATA%\junie-bridge\credentials.json` (or `$JUNIE_BRIDGE_CREDENTIALS` if set; `~/.config/junie-bridge/credentials.json` on Unix) — same file as `junie-bridge` — and refreshes before every request via `chat.headers`. One login covers all three providers (see `AGENTS.md`). Legacy env var `JUNIE_OPENAI_CREDENTIALS` and `junie-openai/` paths removed in `4602884` are no longer read.
 
@@ -98,8 +98,7 @@ Auth is **not** in OpenCode's auth store. The plugin reads/writes `%APPDATA%\jun
 # local checkout — add file plugin to opencode.jsonc (do NOT pass a Windows dir to `opencode plugin`):
 # $env:USERPROFILE\.config\opencode\opencode.jsonc  or .\.opencode.jsonc
 # { "plugin": ["file:///C:/Users/MyUser/IdeaProjects/junie-bridge"] }
-# (single entry provides all three families via enumerated exports; the three
-#  opencode-*.ts files remain available if you prefer to load families individually)
+# (single entry provides all three families via enumerated exports)
 # or use the npm package
 
 # installed package (npm name is pi-jetbrains-junie-bridge):
@@ -171,5 +170,5 @@ Balance/quota details: `balanceLeft`/`balanceUnit` from `GET /auth/test`, tariff
 ## Quick decision tree
 
 - Iterating on `pi.ts`? → `--extension` one-off + `auth check` + interactive `/login`.
-- Iterating on `opencode-*.ts` or `server.ts`? → `npm test` then `opencode run -m junie-...` (per `AGENTS.md` — must run opencode yourself).
+- Iterating on `opencode.ts`/`opencode-plugin.ts` or `server.ts`? → `npm test` then `opencode run -m junie-...` (per `AGENTS.md` — must run opencode yourself).
 - Need a plain OpenAI client? → `junie-bridge --port` + `curl /v1/chat/completions`.
