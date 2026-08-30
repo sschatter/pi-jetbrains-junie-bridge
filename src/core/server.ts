@@ -1276,13 +1276,13 @@ async function handleBalance(req: IncomingMessage, res: ServerResponse): Promise
 async function handleConnTest(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   const diag = getProxyDiagnostics();
   const result: {
-    proxy: string | null;
+    proxy: { proxy: string | null; auth: string };
     proxyAuth: string;
     nodeVersion: string;
     upstream: string;
     tests: Record<string, { ok: boolean; addresses?: string[]; error?: string; status?: number }>;
   } = {
-    proxy: diag.proxy,
+    proxy: { proxy: diag.proxy, auth: diag.auth },
     proxyAuth: diag.auth,
     nodeVersion: process.version,
     upstream: UPSTREAM_BASE,

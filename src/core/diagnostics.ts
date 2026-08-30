@@ -50,11 +50,20 @@ export async function collectDiagnostics(
     connectivity ? fetchBridgeJson(bridge, "/junie/test", { accessToken }) : undefined,
   ]);
 
+  const testBody = test?.body as { proxy?: unknown; proxyAuth?: unknown } | undefined;
+  let proxy: unknown;
+  if (testBody) {
+    if (testBody.proxy !== null && typeof testBody.proxy === "object") {
+      proxy = testBody.proxy;
+    } else if (typeof testBody.proxy === "string" || testBody.proxy === null) {
+      proxy = { proxy: testBody.proxy, auth: (testBody.proxyAuth as string | undefined) ?? "none" };
+    }
+  }
   return {
     balance: balance.body as Balance | undefined,
     models: models.body as Diagnostics["models"],
     connectivity: test?.body as Diagnostics["connectivity"],
-    proxy: (test?.body as { proxy?: unknown } | undefined)?.proxy,
+    proxy,
   };
 }
 
