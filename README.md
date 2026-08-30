@@ -200,7 +200,7 @@ The extension starts a local proxy server that translates between Pi and JetBrai
 ## Disclaimer
 
 This extension includes a proxy server reverse-engineered from the official [JetBrains Junie CLI](https://github.com/JetBrains/junie).
-It is not officially supported by JetBrains. Use it in accordance with the [JetBrains AI Service Terms of Service](https://www.jetbrains.com/legal/docs/toolbox/ai-service-terms/).
+It is not officially supported by JetBrains. Use it in accordance with the [JetBrains AI Terms of Service](https://www.jetbrains.com/legal/docs/terms/jetbrains-ai-service/) and [JetBrains AI Platform Terms of Service](https://www.jetbrains.com/legal/docs/terms/jetbrains-ai-platform/).
 
 ## License
 
