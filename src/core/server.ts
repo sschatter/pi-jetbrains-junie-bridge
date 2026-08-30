@@ -189,7 +189,11 @@ async function forwardOpenAI(payload: JsonRecord, authHeader: string): Promise<R
   });
   if (res.status === 477 && state.freeGoogleApi) {
     state.freeGoogleApi = false;
-    return new Response("upstream returned 477, retrying without X-Free-Google-Api", { status: 503 });
+    return proxyFetch(url, {
+      method: "POST",
+      headers: openaiHeaders(authHeader),
+      body: JSON.stringify(body),
+    });
   }
   return res;
 }
@@ -198,15 +202,18 @@ async function forwardResponses(payload: JsonRecord, authHeader: string): Promis
   const url = `${UPSTREAM_BASE}/v1/responses`;
   const body = sanitizeResponses(payload);
   const model = String(payload["model"] ?? "");
-  const headers = isGrokModel(model) ? grokHeaders(authHeader) : openaiHeaders(authHeader);
   const res = await proxyFetch(url, {
     method: "POST",
-    headers,
+    headers: isGrokModel(model) ? grokHeaders(authHeader) : openaiHeaders(authHeader),
     body: JSON.stringify(body),
   });
   if (res.status === 477 && state.freeGoogleApi) {
     state.freeGoogleApi = false;
-    return new Response("upstream returned 477, retrying without X-Free-Google-Api", { status: 503 });
+    return proxyFetch(url, {
+      method: "POST",
+      headers: isGrokModel(model) ? grokHeaders(authHeader) : openaiHeaders(authHeader),
+      body: JSON.stringify(body),
+    });
   }
   return res;
 }
@@ -220,7 +227,11 @@ async function forwardGoogle(model: string, method: string, search: string, body
   });
   if (res.status === 477 && state.freeGoogleApi) {
     state.freeGoogleApi = false;
-    return new Response("upstream returned 477, retrying without X-Free-Google-Api", { status: 503 });
+    return proxyFetch(url, {
+      method: "POST",
+      headers: googleHeaders(authHeader),
+      body,
+    });
   }
   return res;
 }
@@ -235,7 +246,11 @@ async function forwardAnthropic(payload: JsonRecord, authHeader: string): Promis
   });
   if (res.status === 477 && state.freeGoogleApi) {
     state.freeGoogleApi = false;
-    return new Response("upstream returned 477, retrying without X-Free-Google-Api", { status: 503 });
+    return proxyFetch(url, {
+      method: "POST",
+      headers: anthropicHeaders(authHeader),
+      body: JSON.stringify(body),
+    });
   }
   return res;
 }
