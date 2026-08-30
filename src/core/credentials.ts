@@ -30,13 +30,15 @@ export async function readCredentialsFile(): Promise<JunieCredentialFile | undef
 }
 
 export async function refreshCredentialsFile(credentials: JunieCredentialFile): Promise<JunieCredentialFile> {
-  if (credentials.expires && credentials.expires > Date.now()) return credentials;
+  if (credentials.expires && credentials.expires > Date.now() + 30_000) return credentials;
   if (!credentials.refresh) return credentials;
   const refreshed = await junieRefreshToken(credentials);
-  if (refreshed?.access && refreshed.access !== credentials.access) {
+  if (refreshed?.access && (refreshed.access !== credentials.access || refreshed.refresh !== credentials.refresh || refreshed.expires !== credentials.expires)) {
     await saveCredentialsFile(refreshed);
     return refreshed;
   }
+  // Refresh may have returned same credentials on failure — still return refreshed if it has access
+  if (refreshed?.access) return refreshed;
   return credentials;
 }
 
