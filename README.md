@@ -1,6 +1,6 @@
 # pi-jetbrains-junie-bridge
 
-A [Pi](https://pi.dev/) extension and [OpenCode](https://opencode.ai/) plugin that lets you use [JetBrains Junie](https://junie.jetbrains.com/) as the AI backend — using your existing Junie subscription.
+A [Pi](https://pi.dev/) extension, [OpenCode](https://opencode.ai/) plugin and OpenAI-compatible server that lets you use [JetBrains Junie](https://junie.jetbrains.com/) as the AI backend — using your existing Junie subscription.
 
 ## Install
 
@@ -90,7 +90,7 @@ Add the plugin file to OpenCode's config instead:
 }
 ```
 
-Put this in `%USERPROFILE%\.config\opencode\opencode.jsonc`, or in a project
+Put this in `$USERPROFILE/.config/opencode/opencode.jsonc`, or in a project
 `opencode.jsonc` for project-only loading. Replace the path with the absolute
 location of your checkout and restart OpenCode, then authenticate with the
 command above.
@@ -100,7 +100,7 @@ command above.
 - **OAuth login** — browser-based JetBrains authentication with automatic token refresh
 - **Balance tracking** — session cost and remaining balance shown in Pi's status line (see footer) while a Junie model is selected
   ![Screnshot showcasing balance tracking](./docs/balance_tracking.png)
-- **`/junie` command** — check proxy status, balance, and available models from within Pi
+- **Pi `/junie` command** — check proxy status, balance, and available models from within Pi
   ![Screnshot showcasing the `junie` command](./docs/junie_command.png)
 - **OpenCode `junie_status` tool and `/junie` command** — run `/junie` in OpenCode
   to display balance, connectivity, proxy diagnostics, and backend models that are
