@@ -616,6 +616,11 @@ async function* iterAnthropicEvents(upstreamRes: Response): AsyncGenerator<{ eve
       if (ev) yield ev as { event: string; data: JsonRecord };
     }
   }
+  buf += decoder.decode();
+  if (buf.trim()) {
+    const ev = parseSSEFields(buf);
+    if (ev) yield ev as { event: string; data: JsonRecord };
+  }
 }
 
 async function* iterGoogleEvents(upstreamRes: Response): AsyncGenerator<JsonRecord> {
@@ -638,6 +643,16 @@ async function* iterGoogleEvents(upstreamRes: Response): AsyncGenerator<JsonReco
         if (!json || json === "[DONE]") continue;
         try { yield JSON.parse(json) as JsonRecord; } catch { /* ignore */ }
       }
+    }
+  }
+  buf += decoder.decode();
+  if (buf.trim()) {
+    for (const line of buf.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const json = trimmed.slice(5).trimStart();
+      if (!json || json === "[DONE]") continue;
+      try { yield JSON.parse(json) as JsonRecord; } catch { /* ignore */ }
     }
   }
 }
