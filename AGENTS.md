@@ -15,3 +15,10 @@ The plugin registers three sibling providers (even footing): `junie-openai` (`@a
 (`@ai-sdk/anthropic`, bridge root). OpenCode ignores per-model `api` overrides and routes every
 model in a provider through that provider's `npm` + `baseURL`, which is why each SDK family is a
 separate provider/plugin.
+
+The standalone `junie-openai` server also exposes a **universal OpenAI-shaped endpoint**:
+`/v1/chat/completions` accepts `claude-*` and `gemini-*` models and translates them into the
+backend's native Anthropic (`/v1/messages`) and Google (`generateContent`) calls, with SSE
+streaming and tool/function-call translation (`translateOpenAIToAnthropic` /
+`translateOpenAIToGoogle` in `src/core/server.ts`). This is a convenience surface for plain OpenAI
+SDK clients; the three per-SDK OpenCode providers remain the high-fidelity path.
