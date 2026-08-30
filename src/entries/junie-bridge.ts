@@ -8,9 +8,9 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 function usage() {
-  console.error("Usage: junie-openai [login] [--host <address>] [--port <number>] [--verbose]");
+  console.error("Usage: junie-bridge [login] [--host <address>] [--port <number>] [--verbose]");
   console.error("  Defaults to 127.0.0.1 and an ephemeral port.");
-  console.error("  Run 'junie-openai login' to authenticate with Junie in your browser.");
+  console.error("  Run 'junie-bridge login' to authenticate with Junie in your browser.");
 }
 
 type ServeOptions = { command: "serve" | "login"; host: string; port: number; verbose: boolean };
@@ -117,7 +117,7 @@ export async function main(args = process.argv.slice(2)) {
     console.log(`Junie OpenAI-compatible endpoint: http://${address}:${port}/v1`);
     console.log(credentials
       ? "Using the saved Junie login; an Authorization header may still override it."
-      : "No saved login found; use an Authorization: Bearer <Junie access token> header or run 'junie-openai login'.");
+      : "No saved login found; use an Authorization: Bearer <Junie access token> header or run 'junie-bridge login'.");
 
     const shutdown = () => {
       if (refreshTimer) clearTimeout(refreshTimer);

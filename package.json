@@ -12,12 +12,12 @@
     "server"
   ],
   "exports": {
-    ".": "./src/entries/junie-openai.ts",
+    ".": "./src/entries/junie-bridge.ts",
     "./server": "./src/entries/opencode.ts"
   },
-  "main": "./src/entries/junie-openai.ts",
+  "main": "./src/entries/junie-bridge.ts",
   "bin": {
-    "junie-openai": "./src/entries/junie-openai.ts"
+    "junie-bridge": "./src/entries/junie-bridge.ts"
   },
   "keywords": [
     "pi",

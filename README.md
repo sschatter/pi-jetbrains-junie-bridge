@@ -46,14 +46,14 @@ The same bridge can be used by external OpenAI-compatible clients without Pi or
 OpenCode:
 
 ```powershell
-npx junie-openai --port 8787
+npx junie-bridge --port 8787
 ```
 
 Authenticate once with the shared Junie browser login, then start the server:
 
 ```powershell
-npx junie-openai login
-npx junie-openai --port 8787
+npx junie-bridge login
+npx junie-bridge --port 8787
 ```
 
 The login stores a refreshable credential in the user profile (override its
