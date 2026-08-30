@@ -96,7 +96,7 @@ Add the plugin file to OpenCode's config instead:
 
 ```json
 {
-  "plugin": ["file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/src/entries/opencode.ts"]
+  "plugin": ["file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge"]
 }
 ```
 
@@ -104,12 +104,7 @@ Put this in `$USERPROFILE/.config/opencode/opencode.jsonc` (or
 `%USERPROFILE%\.config\opencode\opencode.jsonc` on Windows), or in a project
 `opencode.jsonc` for project-only loading. Replace the path with the absolute
 location of your checkout and restart OpenCode, then authenticate with the
-command above. `src/entries/opencode.ts` re-exports the three family plugins
-(`opencode-openai.ts` / `opencode-google.ts` / `opencode-anthropic.ts` via
-`src/entries/opencode-plugin.ts`) as enumerated exports, so a single entry
-provides `junie-openai`, `junie-google` and `junie-anthropic`. The three
-`opencode-*.ts` files remain available if you prefer to load families
-individually.
+command above.
 
 ## Features
 

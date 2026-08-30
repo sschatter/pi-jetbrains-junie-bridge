@@ -97,7 +97,7 @@ Auth is **not** in OpenCode's auth store. The plugin reads/writes `%APPDATA%\jun
 ```powershell
 # local checkout — add file plugin to opencode.jsonc (do NOT pass a Windows dir to `opencode plugin`):
 # $env:USERPROFILE\.config\opencode\opencode.jsonc  or .\.opencode.jsonc
-# { "plugin": ["file:///C:/Users/MyUser/IdeaProjects/junie-bridge/src/entries/opencode.ts"] }
+# { "plugin": ["file:///C:/Users/MyUser/IdeaProjects/junie-bridge"] }
 # (single entry provides all three families via enumerated exports; the three
 #  opencode-*.ts files remain available if you prefer to load families individually)
 # or use the npm package
