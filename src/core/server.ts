@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createServer } from "node:http";
 import { KNOWN_GRAZIE_MODELS, classifyBackendModels, classifyModel, MODEL_CLASSIFICATIONS } from "./models.ts";
 import { proxyFetch, getProxyDiagnostics } from "./proxy.ts";
@@ -712,7 +711,7 @@ async function pipeStreamToRes(stream, res) {
 const PROXY_407_HINT =
   "Your corporate proxy requires NTLM/Kerberos authentication, which is not supported directly. " +
   "Install a local proxy like px (https://github.com/genotrance/px) that handles NTLM/Kerberos, " +
-  "then set HTTPS_PROXY=http://localhost:<px-port> before starting Pi.";
+  "then set HTTPS_PROXY=http://localhost:<px-port> before starting the client.";
 
 function extractErrorMessage(e) {
   const parts = [e.message];
@@ -787,7 +786,7 @@ async function pipeSSE(upstreamRes, res) {
 async function handleChatCompletions(req, res) {
   const auth = getAuthHeader(req);
   if (!auth) {
-    sendJson(res, 401, { error: { message: "Not authenticated — run /login in Pi", type: "auth_error" } });
+    sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
     return;
   }
   state.lastAuthHeader = auth;
@@ -855,7 +854,7 @@ async function handleChatToGoogle(payload, auth, res) {
 async function handleResponses(req, res) {
   const auth = getAuthHeader(req);
   if (!auth) {
-    sendJson(res, 401, { error: { message: "Not authenticated — run /login in Pi", type: "auth_error" } });
+    sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
     return;
   }
   state.lastAuthHeader = auth;
@@ -891,7 +890,7 @@ async function handleResponses(req, res) {
 async function handleMessages(req, res) {
   const auth = getAuthHeader(req);
   if (!auth) {
-    sendJson(res, 401, { error: { message: "Not authenticated — run /login in Pi", type: "auth_error" } });
+    sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
     return;
   }
   state.lastAuthHeader = auth;
@@ -934,7 +933,7 @@ async function handleMessages(req, res) {
 async function handleGoogle(req, res, url) {
   const auth = getAuthHeader(req);
   if (!auth) {
-    sendJson(res, 401, { error: { message: "Not authenticated — run /login in Pi", type: "auth_error" } });
+    sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
     return;
   }
   state.lastAuthHeader = auth;
@@ -1075,7 +1074,7 @@ async function handleBalance(req, res) {
   // Use explicitly provided auth, or fall back to last seen auth from chat requests
   const auth = getAuthHeader(req) || state.lastAuthHeader;
   if (!auth) {
-    sendJson(res, 401, { error: { message: "No auth token available — run /login in Pi", type: "auth_error" } });
+    sendJson(res, 401, { error: { message: "No auth token available — run login", type: "auth_error" } });
     return;
   }
 

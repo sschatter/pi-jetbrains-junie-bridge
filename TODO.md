@@ -1,0 +1,7 @@
+- [x] See if the OpenAI standalone server can or should support Anthropic and Google compatibility too
+- [x] Rename `junie-openai` to `junie-bridge`, `junie-http` or `junie-server`
+- [x] Clean up the TypeScript, eg `@ts-nocheck` comments
+- [x] Document technical choices, eg why multiple providers in OpenCode (to allow vendor-specific features)
+- [x] Update the README. Make sure it covers junie-bridge and the opencode plugin well, including how to use them in local development (instead of published npm package)
+- [x] Fix "Pi" references in `server.ts`
+- [x] review all changes since `main`

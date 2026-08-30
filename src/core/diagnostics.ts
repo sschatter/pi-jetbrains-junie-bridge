@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { fetchBridgeJson } from "./bridge.ts";
 import { classifyBackendModels } from "./models.ts";
 

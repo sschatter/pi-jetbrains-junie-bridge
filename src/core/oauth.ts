@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * JetBrains Junie OAuth PKCE flow — adapted for Pi's OAuthLoginCallbacks.
  *
