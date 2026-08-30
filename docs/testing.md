@@ -113,7 +113,7 @@ npx junie-bridge login                        # published package
 npm run junie-bridge -- login                 # local checkout (package.json:scripts.junie-bridge, no publish needed)
 # also: node --run junie-bridge login        # npm 10.2+ shorthand
 
-# verify bridge + models (requires the file or a per-request Authorization header):
+# verify bridge + models (requires the file — run `npm run junie-bridge -- login` first):
 npx opencode run -m junie-openai/openai-gpt-5-2 "say hello in one word: hi"
 npx opencode run -m junie-openai/grok-4-3 "say hi"
 npx opencode run -m junie-anthropic/claude-sonnet-5 "say hi"
@@ -127,7 +127,7 @@ If `credentials.json` is missing or the refresh token is dead, the plugin opens 
 
 ## Standalone OpenAI-compatible server
 
-Same `src/core/server.ts` bridge, no Pi/OpenCode TUI needed. Accepts per-request `Authorization: Bearer <Junie access token>` which takes precedence over the saved login.
+Same `src/core/server.ts` bridge, no Pi/OpenCode TUI needed. Requires saved login (`npm run junie-bridge -- login`); per-request `Authorization` headers are ignored.
 
 ```powershell
 # one-time login (writes %APPDATA%\junie-bridge\credentials.json):
@@ -149,12 +149,12 @@ Invoke-RestMethod http://127.0.0.1:8787/v1/models
 Invoke-RestMethod http://127.0.0.1:8787/junie/balance
 Invoke-RestMethod http://127.0.0.1:8787/junie/test
 
-# OpenAI-shaped calls (all three families via the universal endpoint):
+# OpenAI-shaped calls (all three families via the universal endpoint, requires login first):
 # openai (also /v1/responses for Responses API):
-curl -H "Authorization: Bearer $token" http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"openai-gpt-5-2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"openai-gpt-5-2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
 # universal translation — claude/gemini via OpenAI shape (src/core/server.ts:239-597):
-curl -H "Authorization: Bearer $token" http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"claude-sonnet-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
-curl -H "Authorization: Bearer $token" http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"gemini-3.5-flash-lite\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"claude-sonnet-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"gemini-3.5-flash-lite\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
 ```
 
 Balance/quota details: `balanceLeft`/`balanceUnit` from `GET /auth/test`, tariff/topUp split from `POST /user/v5/quota/get` + `/user/v5/quota/metadata/refill` — see `handleBalance` `src/core/server.ts:1080`. Credentials path: `src/core/credentials.ts:7`.

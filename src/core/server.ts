@@ -752,6 +752,17 @@ function sendJson(res, status, data) {
 }
 
 function getAuthHeader(req) {
+  // Saved login (standalone junie-bridge) is authoritative — per-request
+  // Authorization / x-api-key / x-goog-api-key headers are ignored when a
+  // saved login is configured. This makes `junie-bridge login` mandatory.
+  // Ephemeral bridges (Pi / OpenCode via bridge.ts) have no defaultAuthHeader
+  // and still use per-request headers.
+  const hasDefault = state.defaultAuthHeader !== undefined;
+  if (hasDefault) {
+    if (typeof state.defaultAuthHeader === "function") return state.defaultAuthHeader();
+    return state.defaultAuthHeader;
+  }
+  // No saved login — fall back to per-request headers for ephemeral bridges.
   // The @google/genai SDK sends the key as x-goog-api-key, the @ai-sdk/anthropic
   // SDK as x-api-key, and everything else as a bearer token in Authorization.
   const googleKey = req.headers["x-goog-api-key"];
@@ -760,8 +771,7 @@ function getAuthHeader(req) {
     return `Bearer ${googleKey}`;
   }
   if (auth) return typeof auth === "string" && auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`;
-  if (typeof state.defaultAuthHeader === "function") return state.defaultAuthHeader();
-  return state.defaultAuthHeader;
+  return undefined;
 }
 
 async function pipeSSE(upstreamRes, res) {
@@ -979,8 +989,13 @@ async function handleGoogle(req, res, url) {
 }
 
 async function handleModels(req, res) {
+  const hasDefault = state.defaultAuthHeader !== undefined;
+  const auth = getAuthHeader(req) || (!hasDefault ? state.lastAuthHeader : undefined);
+  if (hasDefault && !auth) {
+    sendJson(res, 401, { error: { message: "Not authenticated — run 'junie-bridge login'", type: "auth_error" } });
+    return;
+  }
   let ids = KNOWN_GRAZIE_MODELS;
-  const auth = getAuthHeader(req) || state.lastAuthHeader;
   if (auth) {
     try {
       const upstream = await proxyFetch(`${UPSTREAM_BASE}/v1/models`, {
@@ -1078,10 +1093,11 @@ function buildQuota(quota, refill) {
 }
 
 async function handleBalance(req, res) {
-  // Use explicitly provided auth, or fall back to last seen auth from chat requests
-  const auth = getAuthHeader(req) || state.lastAuthHeader;
+  // Saved login is authoritative for standalone junie-bridge; ephemeral bridges fall back to last seen auth.
+  const hasDefault = state.defaultAuthHeader !== undefined;
+  const auth = getAuthHeader(req) || (!hasDefault ? state.lastAuthHeader : undefined);
   if (!auth) {
-    sendJson(res, 401, { error: { message: "No auth token available — run login", type: "auth_error" } });
+    sendJson(res, 401, { error: { message: "Not authenticated — run 'junie-bridge login'", type: "auth_error" } });
     return;
   }
 

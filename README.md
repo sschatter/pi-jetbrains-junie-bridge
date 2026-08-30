@@ -69,8 +69,7 @@ npx junie-bridge --port 8787
 ```
 
 The login stores a refreshable credential in the user profile (override its
-location with `JUNIE_BRIDGE_CREDENTIALS`). Requests may still provide their own
-`Authorization: Bearer` header, which takes precedence over the saved login.
+location with `JUNIE_BRIDGE_CREDENTIALS`). The server requires this login — per-request `Authorization` headers are ignored.
 
 The server listens on `127.0.0.1` by default. Set `JUNIE_HOST` or `JUNIE_PORT`, or
 pass `--host` and `--port`, to change that. Configure the client with base URL
@@ -88,8 +87,7 @@ Invoke-RestMethod http://127.0.0.1:8787/junie/test
 
 `/junie/balance` reports the license, monthly and top-up credit balances, quota,
 and account status. `/junie/test` checks connectivity through the configured
-proxy. These endpoints use the saved login automatically; otherwise provide an
-`Authorization: Bearer <Junie access token>` header.
+proxy. These endpoints require the saved login (`junie-bridge login`).
 
 For a local checkout, do not pass the Windows directory to `opencode plugin`.
 Add the plugin file to OpenCode's config instead:

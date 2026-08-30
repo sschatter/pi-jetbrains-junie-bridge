@@ -85,7 +85,7 @@ export async function main(args = process.argv.slice(2)) {
 
     const credentials = await loadCredentials();
     if (credentials?.access && !isLoopbackHost(options.host)) {
-      throw new Error("Refusing to bind a saved Junie login to a non-loopback host. Use a loopback host or remove the saved login and provide Authorization headers per request.");
+      throw new Error("Refusing to bind a saved Junie login to a non-loopback host. Use a loopback host or remove the saved login.");
     }
 
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -116,8 +116,8 @@ export async function main(args = process.argv.slice(2)) {
       : options.host;
     console.log(`Junie OpenAI-compatible endpoint: http://${address}:${port}/v1`);
     console.log(credentials
-      ? "Using the saved Junie login; an Authorization header may still override it."
-      : "No saved login found; use an Authorization: Bearer <Junie access token> header or run 'junie-bridge login'.");
+      ? "Using the saved Junie login."
+      : "No saved login found; run 'junie-bridge login' to authenticate. The server will reject requests until login succeeds.");
 
     const shutdown = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
