@@ -182,12 +182,33 @@ export default async function (pi: ExtensionAPI) {
   // Start proxy on ephemeral port (OS assigns a free port)
   const { server, port } = await startServer();
 
-  const oauth = {
+  type OAuthCallbacks = Parameters<NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]>["login"]>[0];
+  type OAuthCreds = Awaited<ReturnType<NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]>["login"]>>;
+
+  function toOAuthCreds(file: import("../core/credentials.ts").JunieCredentialFile): OAuthCreds {
+    if (!file.refresh || file.expires === undefined) throw new Error("Junie login missing refresh/expires");
+    return { access: file.access, refresh: file.refresh, expires: file.expires };
+  }
+
+  const oauth: NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]> = {
     name: "JetBrains Junie",
-    login: junieLogin as unknown as (callbacks: unknown) => Promise<unknown>,
-    refreshToken: junieRefreshToken as unknown as (credentials: unknown, signal: unknown) => Promise<unknown>,
-    getApiKey: (cred: { access: string }) => cred.access,
-  } as unknown as NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]>;
+    async login(callbacks: OAuthCallbacks): Promise<OAuthCreds> {
+      const file = await junieLogin({
+        signal: callbacks.signal,
+        onAuth: ({ url }: { url: string }) => callbacks.onAuth({ url }),
+      });
+      return toOAuthCreds(file);
+    },
+    async refreshToken(credentials: OAuthCreds, _signal: AbortSignal): Promise<OAuthCreds> {
+      const file = await junieRefreshToken({
+        access: credentials.access,
+        refresh: credentials.refresh,
+        expires: credentials.expires,
+      });
+      return toOAuthCreds(file);
+    },
+    getApiKey: (cred: OAuthCreds) => cred.access,
+  };
 
   // Single provider — OpenAI models inherit provider-level api/baseUrl,
   // Claude models override per-model (api + baseUrl).
@@ -202,7 +223,7 @@ export default async function (pi: ExtensionAPI) {
       ...buildProviderModels("claude", Number(port)),
       ...buildProviderModels("grok", Number(port)),
       ...buildProviderModels("gemini", Number(port)),
-    ] as unknown as import("@earendil-works/pi-coding-agent").ProviderModelConfig[],
+    ],
   });
 
   // Balance tracking after each turn

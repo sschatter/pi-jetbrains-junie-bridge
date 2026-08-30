@@ -191,21 +191,11 @@ const PREFIX_BY_TYPE: Record<string, string> = {
  */
 export type ProviderType = "openai" | "claude" | "grok" | "gemini";
 
-export type BuiltProviderModel = {
-  id: string;
-  name: string;
-  reasoning: boolean;
-  input: string[];
-  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
-  contextWindow: number;
-  maxTokens: number;
-  compat?: typeof OPENAI_COMPAT | typeof CLAUDE_COMPAT;
-  api?: string;
-  baseUrl?: string;
-  thinkingLevelMap?: Record<string, string>;
-};
+import type { ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 
-export function buildProviderModels(type: ProviderType, port?: number): BuiltProviderModel[] {
+export type BuiltProviderModel = ProviderModelConfig;
+
+export function buildProviderModels(type: ProviderType, port?: number): ProviderModelConfig[] {
   const prefix = PREFIX_BY_TYPE[type];
   // Gemini goes through pi-ai's Google client, which ignores the OpenAI/Claude
   // compat flags — leave them off rather than sending misleading ones.

@@ -340,7 +340,8 @@ export function translateOpenAIToAnthropic(payload: OpenAIChatPayload): JsonReco
 
   if (payload.tools?.length) {
     anthropic["tools"] = payload.tools.map((t) => {
-      const fn = (t as JsonRecord)["function"] as JsonRecord | undefined ?? t as unknown as JsonRecord;
+      const toolRecord = t as JsonRecord;
+      const fn = (toolRecord["function"] as JsonRecord | undefined) ?? toolRecord;
       return { name: fn["name"], description: fn["description"] ?? "", input_schema: fn["parameters"] ?? { type: "object", properties: {} } };
     });
   }
@@ -479,7 +480,8 @@ export function translateOpenAIToGoogle(payload: OpenAIChatPayload): { method: s
   if (payload.tools?.length) {
     body["tools"] = [{
       functionDeclarations: payload.tools.map((t) => {
-        const fn = (t as JsonRecord)["function"] as JsonRecord | undefined ?? t as unknown as JsonRecord;
+        const toolRecord = t as JsonRecord;
+        const fn = (toolRecord["function"] as JsonRecord | undefined) ?? toolRecord;
         return { name: fn["name"], description: fn["description"] ?? "", parameters: fn["parameters"] ?? { type: "object", properties: {} } };
       }),
     }];
@@ -605,7 +607,7 @@ async function* iterAnthropicEvents(upstreamRes: Response): AsyncGenerator<{ eve
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value as unknown as ArrayBuffer, { stream: true });
+    buf += decoder.decode(value, { stream: true });
     let idx: number;
     while ((idx = buf.indexOf("\n\n")) !== -1) {
       const raw = buf.slice(0, idx);
@@ -624,7 +626,7 @@ async function* iterGoogleEvents(upstreamRes: Response): AsyncGenerator<JsonReco
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value as unknown as ArrayBuffer, { stream: true });
+    buf += decoder.decode(value, { stream: true });
     let idx: number;
     while ((idx = buf.indexOf("\n\n")) !== -1) {
       const raw = buf.slice(0, idx);
@@ -852,7 +854,7 @@ async function pipeSSE(upstreamRes: Response, res: ServerResponse): Promise<void
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      res.write(decoder.decode(value as unknown as ArrayBuffer, { stream: true }));
+      res.write(decoder.decode(value, { stream: true }));
     }
   } catch {
     // stream closed
@@ -887,7 +889,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse):
       return;
     }
 
-    const upstream = await forwardOpenAI(payload as unknown as JsonRecord, auth);
+    const upstream = await forwardOpenAI(payload, auth);
 
     if (!upstream.ok) {
       const text = await upstream.text();
@@ -907,7 +909,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse):
 }
 
 async function handleChatToAnthropic(payload: OpenAIChatPayload, auth: string, res: ServerResponse): Promise<void> {
-  const upstream = await forwardAnthropic(translateOpenAIToAnthropic(payload) as JsonRecord, auth);
+  const upstream = await forwardAnthropic(translateOpenAIToAnthropic(payload), auth);
   if (!upstream.ok) {
     const text = await upstream.text();
     sendJson(res, upstream.status, { error: { message: text, type: "upstream_error", code: upstream.status } });
@@ -947,7 +949,7 @@ async function handleResponses(req: IncomingMessage, res: ServerResponse): Promi
       return;
     }
 
-    const upstream = await forwardResponses(payload as unknown as JsonRecord, auth);
+    const upstream = await forwardResponses(payload, auth);
 
     if (!upstream.ok) {
       const text = await upstream.text();

@@ -103,10 +103,13 @@ function requestOverSocket(socket: Socket, target: URL, options: RequestInit): P
       method: options.method ?? "GET",
       path: `${target.pathname}${target.search}`,
       headers: { ...headers, host: target.host },
-      createConnection: () => tlsConnect({ socket: socket as unknown as Socket, servername: target.hostname } as unknown as Parameters<typeof tlsConnect>[0]),
+      createConnection: () => tlsConnect({ socket, servername: target.hostname } as import("node:tls").ConnectionOptions),
     }, (res: IncomingMessage) => {
       const status = res.statusCode ?? 502;
-      resolve(new Response(NULL_BODY_STATUS.has(status) ? null : Readable.toWeb(res as unknown as Readable) as unknown as BodyInit, {
+      // Node's Readable.toWeb returns node:stream/web ReadableStream, DOM's Response expects dom lib ReadableStream.
+      // Structurally identical at runtime; type mismatch requires a single boundary escape.
+      const bodyStream = Readable.toWeb(res as Readable) as unknown as BodyInit;
+      resolve(new Response(NULL_BODY_STATUS.has(status) ? null : bodyStream, {
         status,
         statusText: res.statusMessage,
         headers: toHeaders(res.headers),
