@@ -22,6 +22,7 @@ import {
   refreshCredentialsFile,
   type JunieCredentialFile,
 } from "../core/credentials.ts";
+import type { Balance } from "../core/diagnostics.ts";
 import { spawn } from "node:child_process";
 
 type Family = "openai" | "google" | "anthropic";
@@ -58,8 +59,9 @@ const DIM = "\u001b[2m";
 const RESET_DIM = "\u001b[22m";
 
 export async function refreshJunieCredentials(credentials: JunieCredentials | undefined, force = false) {
-  if (!credentials || (!force && !junieCredentialsNeedRefresh(credentials))) return credentials;
-  const refreshed = await junieRefreshToken(credentials);
+  if (!credentials?.access) return credentials;
+  if (!force && !junieCredentialsNeedRefresh(credentials as JunieCredentialFile)) return credentials;
+  const refreshed = await junieRefreshToken(credentials as JunieCredentialFile);
   Object.assign(credentials, refreshed);
   return credentials;
 }
@@ -87,8 +89,9 @@ export function makeJuniePlugin(family: Family) {
     const refreshAvailability = async (token = accessToken) => {
       try {
         const { response, body } = await fetchBridgeJson(bridge, "/v1/models", { accessToken: token });
-        if (response.ok && Array.isArray(body?.data)) {
-          availability = new Set(body.data.map((model: { id?: string }) => model.id).filter(Boolean));
+        const modelsBody = body as { data?: Array<{ id?: string }> } | undefined;
+        if (response.ok && Array.isArray(modelsBody?.data)) {
+          availability = new Set(modelsBody.data.map((model: { id?: string }) => model.id).filter(Boolean) as string[]);
         }
       } catch {
         // Static metadata remains authoritative when the local bridge is offline.
@@ -110,8 +113,9 @@ export function makeJuniePlugin(family: Family) {
       return file?.access ? refreshCredentialsFile(file) : undefined;
     };
 
-    const buildModels = (baseURL: string): Record<string, any> => {
-      const entries: Record<string, any> = {};
+    type OpencodeBridgeModel = Record<string, unknown>;
+    const buildModels = (baseURL: string): Record<string, OpencodeBridgeModel> => {
+      const entries: Record<string, OpencodeBridgeModel> = {};
       for (const id of KNOWN_GRAZIE_MODELS) {
         if (!cfg.match(id)) continue;
         if (classifyModel(id).status !== MODEL_CLASSIFICATIONS.SUPPORTED) continue;
@@ -144,8 +148,9 @@ export function makeJuniePlugin(family: Family) {
       return entries;
     };
 
-    const buildConfigModels = (baseURL: string): Record<string, any> => {
-      const entries: Record<string, any> = {};
+    type OpencodeConfigModel = Record<string, unknown>;
+    const buildConfigModels = (baseURL: string): Record<string, OpencodeConfigModel> => {
+      const entries: Record<string, OpencodeConfigModel> = {};
       for (const id of KNOWN_GRAZIE_MODELS) {
         if (!cfg.match(id)) continue;
         if (classifyModel(id).status !== MODEL_CLASSIFICATIONS.SUPPORTED) continue;
@@ -195,14 +200,14 @@ export function makeJuniePlugin(family: Family) {
     return {
       provider: {
         id: cfg.id,
-        async models(provider, ctx) {
+        async models(_provider: unknown, _ctx: unknown) {
           const fileCreds = await readCredentialsFile();
           if (fileCreds?.access) rememberAccessToken(await refreshCredentialsFile(fileCreds));
           else accessToken = undefined;
           await refreshAvailability(accessToken);
-          return buildModels(cfg.baseURL(bridge.baseUrl));
+          return buildModels(cfg.baseURL(bridge.baseUrl)) as unknown as Record<string, import("@opencode-ai/sdk/v2").Model>;
         },
-      },
+      } as unknown as Hooks["provider"],
       "chat.headers": async (input, output) => {
         if (!input.provider?.info?.id?.startsWith("junie-")) return;
         let creds = await readCreds();
@@ -237,7 +242,7 @@ export function makeJuniePlugin(family: Family) {
           rememberAccessToken(creds);
           provider.options.apiKey = creds.access;
         }
-        provider.models = { ...(provider.models ?? {}), ...buildConfigModels(baseURL) };
+        provider.models = { ...(provider.models as Record<string, unknown> ?? {}), ...buildConfigModels(baseURL) } as unknown as typeof provider.models;
       },
       tool: {
         junie_status: junieStatus,
@@ -247,7 +252,7 @@ export function makeJuniePlugin(family: Family) {
         let startingBalance: number | undefined;
         try {
           const { body } = await fetchBridgeJson(bridge, "/junie/balance", { accessToken });
-          startingBalance = availableCredits(body);
+          startingBalance = availableCredits(body as Balance | undefined);
         } catch {
           // The elapsed time is still useful if the pre-turn balance is unavailable.
         }

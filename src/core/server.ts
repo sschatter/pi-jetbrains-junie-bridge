@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { KNOWN_GRAZIE_MODELS, classifyBackendModels, classifyModel, MODEL_CLASSIFICATIONS } from "./models.ts";
 import { proxyFetch, getProxyDiagnostics } from "./proxy.ts";
 
@@ -10,6 +9,13 @@ const GRAZIE_AUTH_BASE = "https://ingrazzio-cloud-prod.labs.jb.gg";
 // Balance/quota lookups back a status line and the /junie command — better to
 // report a missing number than to keep the user waiting.
 const BALANCE_TIMEOUT_MS = 8000;
+
+export type StartServerOptions = {
+  verbose?: boolean;
+  host?: string;
+  port?: number;
+  authToken?: string | (() => string | undefined);
+};
 
 // ─── Proxy State (non-auth) ─────────────────────────────────────────────────
 const state: {
@@ -26,12 +32,12 @@ const state: {
 
 // ─── Model ID Mapping ───────────────────────────────────────────────────────
 const OPENAI_MODEL_MAP: Record<string, string> = {
-  "openai-gpt-5-2":            "gpt-5.2",
-  "openai-gpt-5-4":            "gpt-5.4",
-  "openai-gpt-5-5":            "gpt-5.5",
-  "openai-gpt-5-6-luna":       "gpt-5.6-luna",
-  "openai-gpt-5-6-terra":      "gpt-5.6-terra",
-  "openai-gpt-5-6-sol":        "gpt-5.6-sol",
+  "openai-gpt-5-2": "gpt-5.2",
+  "openai-gpt-5-4": "gpt-5.4",
+  "openai-gpt-5-5": "gpt-5.5",
+  "openai-gpt-5-6-luna": "gpt-5.6-luna",
+  "openai-gpt-5-6-terra": "gpt-5.6-terra",
+  "openai-gpt-5-6-sol": "gpt-5.6-sol",
 };
 
 // xAI models — same OpenAI Responses API surface, but the Grazie backend needs
@@ -41,26 +47,26 @@ const GROK_MODEL_MAP: Record<string, string> = {
   "grok-4-5": "grok-4.5",
 };
 
-function resolveOpenAIModelId(modelId: string) {
+function resolveOpenAIModelId(modelId: string): string {
   return OPENAI_MODEL_MAP[modelId] ?? GROK_MODEL_MAP[modelId] ?? modelId;
 }
 
-function isOpenAIModel(id: string) { return id.startsWith("openai-"); }
-function isAnthropicModel(id: string) { return id.startsWith("claude-"); }
-function isGrokModel(id: string) { return id.startsWith("grok-"); }
-function isGeminiModel(id: string) { return id.startsWith("gemini-"); }
+function isOpenAIModel(id: string): boolean { return id.startsWith("openai-"); }
+function isAnthropicModel(id: string): boolean { return id.startsWith("claude-"); }
+function isGrokModel(id: string): boolean { return id.startsWith("grok-"); }
+function isGeminiModel(id: string): boolean { return id.startsWith("gemini-"); }
 
 // Google models are not served on an OpenAI-shaped route: Junie talks to them
 // through a Vertex-style generateContent path (LLMAccess$Companion.
 // googleGenerateContent), with "jetbrains-grazie" as the project.
 const GOOGLE_PROJECT = "jetbrains-grazie";
-function googlePath(model: string, method: string) {
+function googlePath(model: string, method: string): string {
   return `/v1beta1/projects/${GOOGLE_PROJECT}/locations/global/publishers/google/models/${model}:${method}`;
 }
 
 // ─── Headers ─────────────────────────────────────────────────────────────────
-function openaiHeaders(authHeader: any) {
-  const h: Record<string, any> = {
+function openaiHeaders(authHeader: string): Record<string, string> {
+  const h: Record<string, string> = {
     "Authorization": authHeader,
     "Content-Type": "application/json",
     "Accept": "text/event-stream,application/json",
@@ -78,16 +84,16 @@ function openaiHeaders(authHeader: any) {
 // Grok goes through the same OpenAI Responses payload/path, only the
 // X-LLM-Model routing header differs (LlmProvider.XAI → "grok" in
 // IngrazzioLLMAccessKt).
-function grokHeaders(authHeader: any) {
+function grokHeaders(authHeader: string): Record<string, string> {
   return { ...openaiHeaders(authHeader), "X-LLM-Model": "grok" };
 }
 
-function googleHeaders(authHeader: any) {
+function googleHeaders(authHeader: string): Record<string, string> {
   return { ...openaiHeaders(authHeader), "X-LLM-Model": "google" };
 }
 
-function anthropicHeaders(authHeader: any) {
-  const h: Record<string, any> = {
+function anthropicHeaders(authHeader: string): Record<string, string> {
+  const h: Record<string, string> = {
     "Authorization": authHeader,
     "Content-Type": "application/json",
     "Accept": "text/event-stream,application/json",
@@ -127,29 +133,32 @@ const RESPONSES_ALLOWED = new Set([
   "store", "stream", "temperature", "top_p", "cache_control",
 ]);
 
-function sanitizeOpenAI(payload: any) {
-  const safe: any = {};
+type JsonRecord = Record<string, unknown>;
+
+function sanitizeOpenAI(payload: JsonRecord): JsonRecord {
+  const safe: JsonRecord = {};
   for (const [k, v] of Object.entries(payload)) {
     if (OPENAI_ALLOWED.has(k)) safe[k] = v;
   }
-  safe.model = resolveOpenAIModelId(payload.model);
-  if (safe.stream) {
-    safe.stream_options = { include_usage: true, ...(safe.stream_options || {}) };
+  safe["model"] = resolveOpenAIModelId(String(payload["model"] ?? ""));
+  if (safe["stream"]) {
+    const streamOpts = safe["stream_options"] as JsonRecord | undefined;
+    safe["stream_options"] = { include_usage: true, ...(streamOpts ?? {}) };
   }
   return safe;
 }
 
-function sanitizeResponses(payload: any) {
-  const safe: any = {};
+function sanitizeResponses(payload: JsonRecord): JsonRecord {
+  const safe: JsonRecord = {};
   for (const [k, v] of Object.entries(payload)) {
     if (RESPONSES_ALLOWED.has(k)) safe[k] = v;
   }
-  safe.model = resolveOpenAIModelId(payload.model);
+  safe["model"] = resolveOpenAIModelId(String(payload["model"] ?? ""));
   return safe;
 }
 
-function sanitizeAnthropic(payload: any) {
-  const safe: any = {};
+function sanitizeAnthropic(payload: JsonRecord): JsonRecord {
+  const safe: JsonRecord = {};
   for (const [k, v] of Object.entries(payload)) {
     if (ANTHROPIC_ALLOWED.has(k)) {
       safe[k] = k === "system" ? sanitizeSystem(v) : v;
@@ -158,21 +167,22 @@ function sanitizeAnthropic(payload: any) {
   return safe;
 }
 
-function sanitizeSystem(system: any) {
+function sanitizeSystem(system: unknown): unknown {
   if (!Array.isArray(system)) return system;
-  return system.map((block) => {
-    if (typeof block !== "object" || block === null || !("cache_control" in block)) return block;
-    const { cache_control, ...rest } = block as any;
+  return (system as unknown[]).map((block) => {
+    if (typeof block !== "object" || block === null || !("cache_control" in (block as JsonRecord))) return block;
+    const { cache_control, ...rest } = block as JsonRecord & { cache_control: unknown };
     if (typeof cache_control !== "object" || cache_control === null) return block;
-    return { ...rest, cache_control: { type: cache_control.type } };
+    const cc = cache_control as JsonRecord;
+    return { ...rest, cache_control: { type: cc["type"] } };
   });
 }
 
 // ─── Upstream Requests ──────────────────────────────────────────────────────
-async function forwardOpenAI(payload: any, authHeader: any) {
+async function forwardOpenAI(payload: JsonRecord, authHeader: string): Promise<Response> {
   const url = `${UPSTREAM_BASE}/v1/chat/completions`;
   const body = sanitizeOpenAI(payload);
-  const res: any = await proxyFetch(url, {
+  const res = await proxyFetch(url, {
     method: "POST",
     headers: openaiHeaders(authHeader),
     body: JSON.stringify(body),
@@ -184,11 +194,12 @@ async function forwardOpenAI(payload: any, authHeader: any) {
   return res;
 }
 
-async function forwardResponses(payload: any, authHeader: any) {
+async function forwardResponses(payload: JsonRecord, authHeader: string): Promise<Response> {
   const url = `${UPSTREAM_BASE}/v1/responses`;
   const body = sanitizeResponses(payload);
-  const headers = isGrokModel(payload.model) ? grokHeaders(authHeader) : openaiHeaders(authHeader);
-  const res: any = await proxyFetch(url, {
+  const model = String(payload["model"] ?? "");
+  const headers = isGrokModel(model) ? grokHeaders(authHeader) : openaiHeaders(authHeader);
+  const res = await proxyFetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -200,9 +211,9 @@ async function forwardResponses(payload: any, authHeader: any) {
   return res;
 }
 
-async function forwardGoogle(model: any, method: any, search: any, body: any, authHeader: any) {
+async function forwardGoogle(model: string, method: string, search: string, body: string, authHeader: string): Promise<Response> {
   const url = `${UPSTREAM_BASE}${googlePath(model, method)}${search}`;
-  const res: any = await proxyFetch(url, {
+  const res = await proxyFetch(url, {
     method: "POST",
     headers: googleHeaders(authHeader),
     body,
@@ -214,10 +225,10 @@ async function forwardGoogle(model: any, method: any, search: any, body: any, au
   return res;
 }
 
-async function forwardAnthropic(payload: any, authHeader: any) {
+async function forwardAnthropic(payload: JsonRecord, authHeader: string): Promise<Response> {
   const url = `${UPSTREAM_BASE}/v1/messages`;
   const body = sanitizeAnthropic(payload);
-  const res: any = await proxyFetch(url, {
+  const res = await proxyFetch(url, {
     method: "POST",
     headers: anthropicHeaders(authHeader),
     body: JSON.stringify(body),
@@ -238,22 +249,43 @@ async function forwardAnthropic(payload: any, authHeader: any) {
 
 const DEFAULT_MAX_TOKENS = 8192;
 
-function firstOf(...vals: any[]) {
+function firstOf<T>(...vals: (T | undefined | null)[]): T | undefined {
   for (const v of vals) if (v !== undefined && v !== null) return v;
   return undefined;
 }
 
 // ── Request: OpenAI → Anthropic ──────────────────────────────────────────────
-export function translateOpenAIToAnthropic(payload: any) {
-  const systemParts = [];
-  const messages = [];
+type OpenAIMessage = {
+  role?: string;
+  content?: unknown;
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: Array<{ id: string; function?: { name?: string; arguments?: string } }>;
+};
+
+type OpenAIChatPayload = {
+  model: string;
+  messages?: OpenAIMessage[];
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  stream?: boolean;
+  stop?: string | string[];
+  tools?: Array<{ function?: { name: string; description?: string; parameters?: unknown }; name?: string; description?: string; parameters?: unknown }>;
+  tool_choice?: unknown;
+};
+
+export function translateOpenAIToAnthropic(payload: OpenAIChatPayload): JsonRecord {
+  const systemParts: string[] = [];
+  const messages: JsonRecord[] = [];
 
   for (const msg of payload.messages ?? []) {
     const role = msg.role;
     if (role === "system" || role === "developer") {
       if (typeof msg.content === "string") systemParts.push(msg.content);
       else if (Array.isArray(msg.content)) {
-        for (const p of msg.content) if (p?.type === "text") systemParts.push(p.text);
+        for (const p of msg.content as Array<{ type?: string; text?: string }>) if (p?.type === "text" && p.text) systemParts.push(p.text);
       }
       continue;
     }
@@ -277,18 +309,18 @@ export function translateOpenAIToAnthropic(payload: any) {
     }
 
     if (role === "assistant") {
-      const content = [];
+      const content: JsonRecord[] = [];
       if (typeof msg.content === "string" && msg.content) {
         content.push({ type: "text", text: msg.content });
       } else if (Array.isArray(msg.content)) {
-        for (const p of msg.content) {
-          if (p?.type === "text") content.push({ type: "text", text: p.text });
-          else if (p?.type === "image_url") content.push(openAIImageToAnthropic(p.image_url));
+        for (const p of msg.content as Array<{ type?: string; text?: string; image_url?: unknown }>) {
+          if (p?.type === "text" && p.text) content.push({ type: "text", text: p.text });
+          else if (p?.type === "image_url") content.push(openAIImageToAnthropic(p.image_url) as JsonRecord);
         }
       }
       if (Array.isArray(msg.tool_calls)) {
         for (const tc of msg.tool_calls) {
-          let input = {};
+          let input: unknown = {};
           try { input = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; }
           catch { input = {}; }
           content.push({ type: "tool_use", id: tc.id, name: tc.function?.name, input });
@@ -298,40 +330,40 @@ export function translateOpenAIToAnthropic(payload: any) {
     }
   }
 
-  const anthropic: any = {
+  const anthropic: JsonRecord = {
     model: payload.model,
-    max_tokens: firstOf(payload.max_tokens, payload.max_completion_tokens, DEFAULT_MAX_TOKENS),
+    max_tokens: firstOf(payload.max_tokens, payload.max_completion_tokens, DEFAULT_MAX_TOKENS) as number,
     messages,
   };
-  if (systemParts.length === 1) anthropic.system = systemParts[0];
-  else if (systemParts.length > 1) anthropic.system = systemParts.map((text) => ({ type: "text", text }));
+  if (systemParts.length === 1) anthropic["system"] = systemParts[0];
+  else if (systemParts.length > 1) anthropic["system"] = systemParts.map((text) => ({ type: "text", text }));
 
   if (payload.tools?.length) {
-    anthropic.tools = payload.tools.map((t: any) => {
-      const fn = t.function ?? t;
-      return { name: fn.name, description: fn.description ?? "", input_schema: fn.parameters ?? { type: "object", properties: {} } };
+    anthropic["tools"] = payload.tools.map((t) => {
+      const fn = (t as JsonRecord)["function"] as JsonRecord | undefined ?? t as unknown as JsonRecord;
+      return { name: fn["name"], description: fn["description"] ?? "", input_schema: fn["parameters"] ?? { type: "object", properties: {} } };
     });
   }
-  if (payload.tool_choice) anthropic.tool_choice = translateToolChoice(payload.tool_choice);
-  if (payload.temperature !== undefined) anthropic.temperature = payload.temperature;
-  if (payload.top_p !== undefined) anthropic.top_p = payload.top_p;
-  if (payload.stop) anthropic.stop_sequences = Array.isArray(payload.stop) ? payload.stop : [payload.stop];
-  if (payload.stream) anthropic.stream = true;
+  if (payload.tool_choice) anthropic["tool_choice"] = translateToolChoice(payload.tool_choice);
+  if (payload.temperature !== undefined) anthropic["temperature"] = payload.temperature;
+  if (payload.top_p !== undefined) anthropic["top_p"] = payload.top_p;
+  if (payload.stop) anthropic["stop_sequences"] = Array.isArray(payload.stop) ? payload.stop : [payload.stop as string];
+  if (payload.stream) anthropic["stream"] = true;
   return anthropic;
 }
 
-function openAIContentToAnthropic(content: any) {
+function openAIContentToAnthropic(content: unknown): unknown {
   if (typeof content === "string") return content;
-  const blocks = [];
-  for (const p of content ?? []) {
-    if (p?.type === "text") blocks.push({ type: "text", text: p.text });
-    else if (p?.type === "image_url") blocks.push(openAIImageToAnthropic(p.image_url));
+  const blocks: JsonRecord[] = [];
+  for (const p of (content as Array<JsonRecord> | undefined) ?? []) {
+    if (p?.["type"] === "text") blocks.push({ type: "text", text: p["text"] });
+    else if (p?.["type"] === "image_url") blocks.push(openAIImageToAnthropic(p["image_url"]) as JsonRecord);
   }
   return blocks;
 }
 
-function openAIImageToAnthropic(imageUrl: any) {
-  const url = typeof imageUrl === "string" ? imageUrl : imageUrl?.url;
+function openAIImageToAnthropic(imageUrl: unknown): JsonRecord {
+  const url = typeof imageUrl === "string" ? imageUrl : (imageUrl as JsonRecord | undefined)?.["url"] as string | undefined;
   if (url?.startsWith("data:")) {
     const m = url.match(/^data:([^;]+);base64,(.*)$/s);
     if (m) return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
@@ -340,18 +372,20 @@ function openAIImageToAnthropic(imageUrl: any) {
   return { type: "image", source: { type: "url", url } };
 }
 
-function translateToolChoice(choice: any) {
+function translateToolChoice(choice: unknown): JsonRecord {
   if (typeof choice === "string") {
     if (choice === "auto") return { type: "auto" };
     if (choice === "none") return { type: "none" };
     if (choice === "required") return { type: "any" };
     return { type: "auto" };
   }
-  if (choice.type === "function") return { type: "tool", name: choice.function?.name };
-  return { type: choice.type === "none" ? "none" : choice.type === "required" ? "any" : "auto" };
+  const c = choice as JsonRecord;
+  if (c["type"] === "function") return { type: "tool", name: (c["function"] as JsonRecord | undefined)?.["name"] };
+  const t = c["type"] as string | undefined;
+  return { type: t === "none" ? "none" : t === "required" ? "any" : "auto" };
 }
 
-function mapAnthropicStopReason(reason: any) {
+function mapAnthropicStopReason(reason: unknown): string {
   switch (reason) {
     case "end_turn":
     case "stop_sequence": return "stop";
@@ -362,9 +396,16 @@ function mapAnthropicStopReason(reason: any) {
 }
 
 // ── Response: Anthropic → OpenAI (non-streaming) ──────────────────────────────
-export function translateAnthropicToOpenAI(resp: any, model: any) {
-  const textParts = [];
-  const toolCalls = [];
+type AnthropicResponse = {
+  id?: string;
+  content?: Array<{ type: string; text?: string; name?: string; id?: string; input?: unknown }>;
+  stop_reason?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+};
+
+export function translateAnthropicToOpenAI(resp: AnthropicResponse, model: string): JsonRecord {
+  const textParts: string[] = [];
+  const toolCalls: JsonRecord[] = [];
   for (const block of resp.content ?? []) {
     if (block.type === "text") textParts.push(block.text ?? "");
     else if (block.type === "tool_use") {
@@ -375,8 +416,8 @@ export function translateAnthropicToOpenAI(resp: any, model: any) {
       });
     }
   }
-  const message: any = { role: "assistant", content: textParts.join("") || null };
-  if (toolCalls.length) message.tool_calls = toolCalls;
+  const message: JsonRecord = { role: "assistant", content: textParts.join("") || null };
+  if (toolCalls.length) message["tool_calls"] = toolCalls;
 
   return {
     id: resp.id ?? `chatcmpl-${Date.now()}`,
@@ -397,15 +438,15 @@ export function translateAnthropicToOpenAI(resp: any, model: any) {
 }
 
 // ── Request: OpenAI → Google (generateContent) ────────────────────────────────
-export function translateOpenAIToGoogle(payload) {
-  const systemParts = [];
-  const contents = [];
+export function translateOpenAIToGoogle(payload: OpenAIChatPayload): { method: string; body: JsonRecord } {
+  const systemParts: string[] = [];
+  const contents: JsonRecord[] = [];
 
   for (const msg of payload.messages ?? []) {
     const role = msg.role;
     if (role === "system" || role === "developer") {
       if (typeof msg.content === "string") systemParts.push(msg.content);
-      else if (Array.isArray(msg.content)) for (const p of msg.content) if (p?.type === "text") systemParts.push(p.text);
+      else if (Array.isArray(msg.content)) for (const p of msg.content as Array<{ type?: string; text?: string }>) if (p?.type === "text" && p.text) systemParts.push(p.text);
       continue;
     }
     if (role === "user") {
@@ -421,11 +462,11 @@ export function translateOpenAIToGoogle(payload) {
       continue;
     }
     if (role === "assistant") {
-      const parts = [];
+      const parts: JsonRecord[] = [];
       if (typeof msg.content === "string" && msg.content) parts.push({ text: msg.content });
-      else if (Array.isArray(msg.content)) for (const p of msg.content) if (p?.type === "text") parts.push({ text: p.text });
+      else if (Array.isArray(msg.content)) for (const p of msg.content as Array<{ type?: string; text?: string }>) if (p?.type === "text" && p.text) parts.push({ text: p.text });
       if (Array.isArray(msg.tool_calls)) for (const tc of msg.tool_calls) {
-        let args = {};
+        let args: unknown = {};
         try { args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { args = {}; }
         parts.push({ functionCall: { name: tc.function?.name, args } });
       }
@@ -433,36 +474,36 @@ export function translateOpenAIToGoogle(payload) {
     }
   }
 
-  const body = { contents };
-  if (systemParts.length) body.systemInstruction = { parts: systemParts.map((text) => ({ text })) };
+  const body: JsonRecord = { contents };
+  if (systemParts.length) body["systemInstruction"] = { parts: systemParts.map((text) => ({ text })) };
   if (payload.tools?.length) {
-    body.tools = [{
+    body["tools"] = [{
       functionDeclarations: payload.tools.map((t) => {
-        const fn = t.function ?? t;
-        return { name: fn.name, description: fn.description ?? "", parameters: fn.parameters ?? { type: "object", properties: {} } };
+        const fn = (t as JsonRecord)["function"] as JsonRecord | undefined ?? t as unknown as JsonRecord;
+        return { name: fn["name"], description: fn["description"] ?? "", parameters: fn["parameters"] ?? { type: "object", properties: {} } };
       }),
     }];
   }
-  if (payload.tool_choice) body.toolConfig = { functionCallingConfig: translateToolChoiceGoogle(payload.tool_choice) };
-  const gen = {};
+  if (payload.tool_choice) body["toolConfig"] = { functionCallingConfig: translateToolChoiceGoogle(payload.tool_choice) };
+  const gen: JsonRecord = {};
   const maxTokens = firstOf(payload.max_completion_tokens, payload.max_tokens);
-  if (maxTokens !== undefined) gen.maxOutputTokens = maxTokens;
-  if (payload.temperature !== undefined) gen.temperature = payload.temperature;
-  if (payload.top_p !== undefined) gen.topP = payload.top_p;
-  if (payload.stop) gen.stopSequences = Array.isArray(payload.stop) ? payload.stop : [payload.stop];
-  if (Object.keys(gen).length) body.generationConfig = gen;
+  if (maxTokens !== undefined) gen["maxOutputTokens"] = maxTokens;
+  if (payload.temperature !== undefined) gen["temperature"] = payload.temperature;
+  if (payload.top_p !== undefined) gen["topP"] = payload.top_p;
+  if (payload.stop) gen["stopSequences"] = Array.isArray(payload.stop) ? payload.stop : [payload.stop as string];
+  if (Object.keys(gen).length) body["generationConfig"] = gen;
 
   const method = payload.stream ? "streamGenerateContent" : "generateContent";
   return { method, body };
 }
 
-function openAIContentToGoogleParts(content) {
+function openAIContentToGoogleParts(content: unknown): JsonRecord[] {
   if (typeof content === "string") return [{ text: content }];
-  const parts = [];
-  for (const p of content ?? []) {
-    if (p?.type === "text") parts.push({ text: p.text });
-    else if (p?.type === "image_url") {
-      const url = typeof p.image_url === "string" ? p.image_url : p.image_url?.url;
+  const parts: JsonRecord[] = [];
+  for (const p of (content as Array<JsonRecord> | undefined) ?? []) {
+    if (p?.["type"] === "text") parts.push({ text: p["text"] });
+    else if (p?.["type"] === "image_url") {
+      const url = typeof p["image_url"] === "string" ? p["image_url"] as string : (p["image_url"] as JsonRecord | undefined)?.["url"] as string | undefined;
       if (url?.startsWith("data:")) {
         const m = url.match(/^data:([^;]+);base64,(.*)$/s);
         if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
@@ -473,17 +514,19 @@ function openAIContentToGoogleParts(content) {
   return parts;
 }
 
-function translateToolChoiceGoogle(choice) {
+function translateToolChoiceGoogle(choice: unknown): JsonRecord {
   if (typeof choice === "string") {
     if (choice === "none") return { mode: "NONE" };
     if (choice === "required") return { mode: "ANY" };
     return { mode: "AUTO" };
   }
-  if (choice.type === "function") return { mode: "ANY", allowedFunctionNames: [choice.function?.name] };
-  return { mode: choice.type === "none" ? "NONE" : choice.type === "required" ? "ANY" : "AUTO" };
+  const c = choice as JsonRecord;
+  if (c["type"] === "function") return { mode: "ANY", allowedFunctionNames: [(c["function"] as JsonRecord | undefined)?.["name"]] };
+  const t = c["type"] as string | undefined;
+  return { mode: t === "none" ? "NONE" : t === "required" ? "ANY" : "AUTO" };
 }
 
-function mapGoogleFinishReason(reason) {
+function mapGoogleFinishReason(reason: unknown): string {
   switch (reason) {
     case "STOP": return "stop";
     case "MAX_TOKENS": return "length";
@@ -495,10 +538,15 @@ function mapGoogleFinishReason(reason) {
   }
 }
 
-export function translateGoogleToOpenAI(resp, model) {
+type GoogleResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args?: unknown } }> }; finishReason?: string }>;
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+};
+
+export function translateGoogleToOpenAI(resp: GoogleResponse, model: string): JsonRecord {
   const candidate = resp.candidates?.[0];
-  const textParts = [];
-  const toolCalls = [];
+  const textParts: string[] = [];
+  const toolCalls: JsonRecord[] = [];
   const finishReason = candidate?.finishReason;
   if (candidate?.content?.parts) {
     candidate.content.parts.forEach((part, i) => {
@@ -512,8 +560,8 @@ export function translateGoogleToOpenAI(resp, model) {
       }
     });
   }
-  const message = { role: "assistant", content: textParts.join("") || null };
-  if (toolCalls.length) message.tool_calls = toolCalls;
+  const message: JsonRecord = { role: "assistant", content: textParts.join("") || null };
+  if (toolCalls.length) message["tool_calls"] = toolCalls;
   const usage = resp.usageMetadata ?? {};
   return {
     id: `chatcmpl-${Date.now()}`,
@@ -534,11 +582,11 @@ export function translateGoogleToOpenAI(resp, model) {
 }
 
 // ── Streaming: backend SSE → OpenAI SSE ───────────────────────────────────────
-function openAIChunk(obj) { return `data: ${JSON.stringify(obj)}\n\n`; }
+function openAIChunk(obj: unknown): string { return `data: ${JSON.stringify(obj)}\n\n`; }
 const SSE_DONE = "data: [DONE]\n\n";
-function createdNow() { return Math.floor(Date.now() / 1000); }
+function createdNow(): number { return Math.floor(Date.now() / 1000); }
 
-function parseSSEFields(raw) {
+function parseSSEFields(raw: string): { event: string; data: unknown } | null {
   let event = "message";
   let data = "";
   for (const line of raw.split("\n")) {
@@ -549,7 +597,7 @@ function parseSSEFields(raw) {
   try { return { event, data: JSON.parse(data) }; } catch { return null; }
 }
 
-async function* iterAnthropicEvents(upstreamRes) {
+async function* iterAnthropicEvents(upstreamRes: Response): AsyncGenerator<{ event: string; data: JsonRecord }> {
   const reader = upstreamRes.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -557,18 +605,18 @@ async function* iterAnthropicEvents(upstreamRes) {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
+    buf += decoder.decode(value as unknown as ArrayBuffer, { stream: true });
+    let idx: number;
     while ((idx = buf.indexOf("\n\n")) !== -1) {
       const raw = buf.slice(0, idx);
       buf = buf.slice(idx + 2);
       const ev = parseSSEFields(raw);
-      if (ev) yield ev;
+      if (ev) yield ev as { event: string; data: JsonRecord };
     }
   }
 }
 
-async function* iterGoogleEvents(upstreamRes) {
+async function* iterGoogleEvents(upstreamRes: Response): AsyncGenerator<JsonRecord> {
   const reader = upstreamRes.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -576,8 +624,8 @@ async function* iterGoogleEvents(upstreamRes) {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
+    buf += decoder.decode(value as unknown as ArrayBuffer, { stream: true });
+    let idx: number;
     while ((idx = buf.indexOf("\n\n")) !== -1) {
       const raw = buf.slice(0, idx);
       buf = buf.slice(idx + 2);
@@ -586,49 +634,49 @@ async function* iterGoogleEvents(upstreamRes) {
         if (!trimmed.startsWith("data:")) continue;
         const json = trimmed.slice(5).trimStart();
         if (!json || json === "[DONE]") continue;
-        try { yield JSON.parse(json); } catch { /* ignore */ }
+        try { yield JSON.parse(json) as JsonRecord; } catch { /* ignore */ }
       }
     }
   }
 }
 
-export function streamAnthropicToOpenAI(upstreamRes, model) {
-  return new ReadableStream({
+export function streamAnthropicToOpenAI(upstreamRes: Response, model: string): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
-      const send = (obj) => controller.enqueue(enc.encode(openAIChunk(obj)));
+      const send = (obj: unknown): void => controller.enqueue(enc.encode(openAIChunk(obj)));
       const created = createdNow();
       let id = `chatcmpl-${Date.now()}`;
-      let finishReason = null;
+      let finishReason: unknown = null;
       let outputTokens = 0;
-      const toolCalls = [];
-      let currentTool = null;
+      const toolCalls: Array<{ index: number; id: string; name: string }> = [];
+      let currentTool: { index: number; id: string; name: string } | null = null;
 
       try {
         for await (const { event, data } of iterAnthropicEvents(upstreamRes)) {
           if (event === "message_start") {
-            id = data.message?.id ?? id;
+            id = (data["message"] as JsonRecord | undefined)?.["id"] as string ?? id;
             send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }] });
           } else if (event === "content_block_start") {
-            const block = data.content_block;
-            if (block?.type === "tool_use") {
+            const block = data["content_block"] as JsonRecord | undefined;
+            if (block?.["type"] === "tool_use") {
               const index = toolCalls.length;
-              currentTool = { index, id: block.id, name: block.name };
+              currentTool = { index, id: block["id"] as string, name: block["name"] as string };
               toolCalls.push(currentTool);
-              send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { tool_calls: [{ index, id: block.id, type: "function", function: { name: block.name, arguments: "" } }] }, finish_reason: null }] });
+              send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { tool_calls: [{ index, id: block["id"], type: "function", function: { name: block["name"], arguments: "" } }] }, finish_reason: null }] });
             }
           } else if (event === "content_block_delta") {
-            const delta = data.delta;
-            if (delta?.type === "text_delta") {
-              send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { content: delta.text }, finish_reason: null }] });
-            } else if (delta?.type === "input_json_delta") {
+            const delta = data["delta"] as JsonRecord | undefined;
+            if (delta?.["type"] === "text_delta") {
+              send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { content: delta["text"] }, finish_reason: null }] });
+            } else if (delta?.["type"] === "input_json_delta") {
               if (currentTool) {
-                send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: currentTool.index, function: { arguments: delta.partial_json } }] }, finish_reason: null }] });
+                send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: currentTool.index, function: { arguments: delta["partial_json"] } }] }, finish_reason: null }] });
               }
             }
           } else if (event === "message_delta") {
-            outputTokens = data.usage?.output_tokens ?? outputTokens;
-            finishReason = data.delta?.stop_reason ?? finishReason;
+            outputTokens = (data["usage"] as JsonRecord | undefined)?.["output_tokens"] as number ?? outputTokens;
+            finishReason = (data["delta"] as JsonRecord | undefined)?.["stop_reason"] ?? finishReason;
           }
         }
         send({
@@ -637,8 +685,9 @@ export function streamAnthropicToOpenAI(upstreamRes, model) {
           usage: { prompt_tokens: 0, completion_tokens: outputTokens, total_tokens: outputTokens },
         });
         controller.enqueue(enc.encode(SSE_DONE));
-      } catch (e) {
-        controller.enqueue(enc.encode(openAIChunk({ error: { message: String(e?.message ?? e) } })));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        controller.enqueue(enc.encode(openAIChunk({ error: { message: msg } })));
       } finally {
         controller.close();
       }
@@ -646,32 +695,34 @@ export function streamAnthropicToOpenAI(upstreamRes, model) {
   });
 }
 
-export function streamGoogleToOpenAI(upstreamRes, model) {
-  return new ReadableStream({
+export function streamGoogleToOpenAI(upstreamRes: Response, model: string): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
-      const send = (obj) => controller.enqueue(enc.encode(openAIChunk(obj)));
+      const send = (obj: unknown): void => controller.enqueue(enc.encode(openAIChunk(obj)));
       const created = createdNow();
       const id = `chatcmpl-${Date.now()}`;
-      const toolCalls = [];
-      let finishReason = null;
-      const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      const toolCalls: Array<{ name: string; args: string }> = [];
+      let finishReason: unknown = null;
+      const usage: JsonRecord = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
       try {
         for await (const chunk of iterGoogleEvents(upstreamRes)) {
-          const candidate = chunk.candidates?.[0];
-          if (chunk.usageMetadata) {
-            usage.prompt_tokens = chunk.usageMetadata.promptTokenCount ?? usage.prompt_tokens;
-            usage.completion_tokens = chunk.usageMetadata.candidatesTokenCount ?? usage.completion_tokens;
-            usage.total_tokens = chunk.usageMetadata.totalTokenCount ?? usage.total_tokens;
+          const candidate = (chunk["candidates"] as JsonRecord[] | undefined)?.[0] as JsonRecord | undefined;
+          const meta = chunk["usageMetadata"] as JsonRecord | undefined;
+          if (meta) {
+            usage["prompt_tokens"] = (meta["promptTokenCount"] as number | undefined) ?? usage["prompt_tokens"];
+            usage["completion_tokens"] = (meta["candidatesTokenCount"] as number | undefined) ?? usage["completion_tokens"];
+            usage["total_tokens"] = (meta["totalTokenCount"] as number | undefined) ?? usage["total_tokens"];
           }
           if (!candidate) continue;
-          finishReason = candidate.finishReason ?? finishReason;
-          for (const part of candidate.content?.parts ?? []) {
-            if (part?.text) {
-              send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { content: part.text }, finish_reason: null }] });
-            } else if (part?.functionCall) {
-              toolCalls.push({ name: part.functionCall.name, args: JSON.stringify(part.functionCall.args ?? {}) });
+          finishReason = (candidate["finishReason"] as unknown) ?? finishReason;
+          for (const part of (candidate["content"] as JsonRecord | undefined)?.["parts"] as JsonRecord[] | undefined ?? []) {
+            if (part?.["text"]) {
+              send({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { content: part["text"] }, finish_reason: null }] });
+            } else if (part?.["functionCall"]) {
+              const fc = part["functionCall"] as JsonRecord;
+              toolCalls.push({ name: fc["name"] as string, args: JSON.stringify(fc["args"] ?? {}) });
             }
           }
         }
@@ -687,8 +738,9 @@ export function streamGoogleToOpenAI(upstreamRes, model) {
           usage,
         });
         controller.enqueue(enc.encode(SSE_DONE));
-      } catch (e) {
-        controller.enqueue(enc.encode(openAIChunk({ error: { message: String(e?.message ?? e) } })));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        controller.enqueue(enc.encode(openAIChunk({ error: { message: msg } })));
       } finally {
         controller.close();
       }
@@ -696,7 +748,7 @@ export function streamGoogleToOpenAI(upstreamRes, model) {
   });
 }
 
-async function pipeStreamToRes(stream, res) {
+async function pipeStreamToRes(stream: ReadableStream<Uint8Array>, res: ServerResponse): Promise<void> {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -720,12 +772,15 @@ const PROXY_407_HINT =
   "Install a local proxy like px (https://github.com/genotrance/px) that handles NTLM/Kerberos, " +
   "then set HTTPS_PROXY=http://localhost:<px-port> before starting the client.";
 
-function extractErrorMessage(e) {
-  const parts = [e.message];
-  if (e.cause) {
-    parts.push(e.cause.message ?? String(e.cause));
-    if (e.cause.code) parts.push(`code=${e.cause.code}`);
-    if (e.cause.cause) parts.push(e.cause.cause.message ?? String(e.cause.cause));
+function extractErrorMessage(e: unknown): string {
+  const err = e as Error & { cause?: Error & { code?: string; cause?: Error } };
+  const parts: string[] = [err?.message ?? String(e)];
+  const cause = err?.cause as Error & { code?: string; cause?: Error } | undefined;
+  if (cause) {
+    parts.push(cause.message ?? String(cause));
+    if (cause.code) parts.push(`code=${cause.code}`);
+    const inner = cause.cause as Error | undefined;
+    if (inner) parts.push(inner.message ?? String(inner));
   }
   const msg = parts.filter(Boolean).join(" — ");
   if (/407/.test(msg)) return `${msg}\n\nHint: ${PROXY_407_HINT}`;
@@ -733,16 +788,16 @@ function extractErrorMessage(e) {
 }
 
 // ─── HTTP Helpers ───────────────────────────────────────────────────────────
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => resolve(Buffer.concat(chunks).toString()));
     req.on("error", reject);
   });
 }
 
-function sendJson(res, status, data) {
+function sendJson(res: ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -751,7 +806,7 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
-function getAuthHeader(req) {
+function getAuthHeader(req: IncomingMessage): string | undefined {
   // Saved login (standalone junie-bridge) is authoritative — per-request
   // Authorization / x-api-key / x-goog-api-key headers are ignored when a
   // saved login is configured. This makes `junie-bridge login` mandatory.
@@ -766,15 +821,22 @@ function getAuthHeader(req) {
   // The @google/genai SDK sends the key as x-goog-api-key, the @ai-sdk/anthropic
   // SDK as x-api-key, and everything else as a bearer token in Authorization.
   const googleKey = req.headers["x-goog-api-key"];
-  const auth = req.headers.authorization ?? req.headers["x-api-key"];
-  if (!auth && typeof googleKey === "string") {
+  const auth = (req.headers.authorization ?? req.headers["x-api-key"]) as string | string[] | undefined;
+  const authStr = Array.isArray(auth) ? auth[0] : auth;
+  if (!authStr && typeof googleKey === "string") {
     return `Bearer ${googleKey}`;
   }
-  if (auth) return typeof auth === "string" && auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`;
+  if (typeof googleKey === "string" && Array.isArray(googleKey)) {
+    // unreachable, but keep for type safety
+  }
+  if (authStr) return typeof authStr === "string" && authStr.startsWith("Bearer ") ? authStr : `Bearer ${authStr}`;
+  if (!authStr && typeof googleKey === "string") {
+    return `Bearer ${googleKey}`;
+  }
   return undefined;
 }
 
-async function pipeSSE(upstreamRes, res) {
+async function pipeSSE(upstreamRes: Response, res: ServerResponse): Promise<void> {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -790,7 +852,7 @@ async function pipeSSE(upstreamRes, res) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      res.write(decoder.decode(value, { stream: true }));
+      res.write(decoder.decode(value as unknown as ArrayBuffer, { stream: true }));
     }
   } catch {
     // stream closed
@@ -800,7 +862,7 @@ async function pipeSSE(upstreamRes, res) {
 
 // ─── Route Handlers ─────────────────────────────────────────────────────────
 
-async function handleChatCompletions(req, res) {
+async function handleChatCompletions(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const auth = getAuthHeader(req);
   if (!auth) {
     sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
@@ -810,14 +872,14 @@ async function handleChatCompletions(req, res) {
 
   try {
     const body = await readBody(req);
-    const payload = JSON.parse(body);
+    const payload = JSON.parse(body) as OpenAIChatPayload & JsonRecord;
 
     if (isAnthropicModel(payload.model)) {
-      await handleChatToAnthropic(payload, auth, res);
+      await handleChatToAnthropic(payload as OpenAIChatPayload, auth, res);
       return;
     }
     if (isGeminiModel(payload.model)) {
-      await handleChatToGoogle(payload, auth, res);
+      await handleChatToGoogle(payload as OpenAIChatPayload, auth, res);
       return;
     }
     if (!isOpenAIModel(payload.model) && !isGrokModel(payload.model)) {
@@ -825,7 +887,7 @@ async function handleChatCompletions(req, res) {
       return;
     }
 
-    const upstream = await forwardOpenAI(payload, auth);
+    const upstream = await forwardOpenAI(payload as unknown as JsonRecord, auth);
 
     if (!upstream.ok) {
       const text = await upstream.text();
@@ -839,23 +901,23 @@ async function handleChatCompletions(req, res) {
       const data = await upstream.json();
       sendJson(res, 200, data);
     }
-  } catch (e) {
+  } catch (e: unknown) {
     sendJson(res, 500, { error: { message: extractErrorMessage(e), type: "internal_error" } });
   }
 }
 
-async function handleChatToAnthropic(payload, auth, res) {
-  const upstream = await forwardAnthropic(translateOpenAIToAnthropic(payload), auth);
+async function handleChatToAnthropic(payload: OpenAIChatPayload, auth: string, res: ServerResponse): Promise<void> {
+  const upstream = await forwardAnthropic(translateOpenAIToAnthropic(payload) as JsonRecord, auth);
   if (!upstream.ok) {
     const text = await upstream.text();
     sendJson(res, upstream.status, { error: { message: text, type: "upstream_error", code: upstream.status } });
     return;
   }
   if (payload.stream) await pipeStreamToRes(streamAnthropicToOpenAI(upstream, payload.model), res);
-  else sendJson(res, 200, translateAnthropicToOpenAI(await upstream.json(), payload.model));
+  else sendJson(res, 200, translateAnthropicToOpenAI(await upstream.json() as AnthropicResponse, payload.model));
 }
 
-async function handleChatToGoogle(payload, auth, res) {
+async function handleChatToGoogle(payload: OpenAIChatPayload, auth: string, res: ServerResponse): Promise<void> {
   const { method, body } = translateOpenAIToGoogle(payload);
   const search = payload.stream ? "?alt=sse" : "";
   const upstream = await forwardGoogle(payload.model, method, search, JSON.stringify(body), auth);
@@ -865,10 +927,10 @@ async function handleChatToGoogle(payload, auth, res) {
     return;
   }
   if (payload.stream) await pipeStreamToRes(streamGoogleToOpenAI(upstream, payload.model), res);
-  else sendJson(res, 200, translateGoogleToOpenAI(await upstream.json(), payload.model));
+  else sendJson(res, 200, translateGoogleToOpenAI(await upstream.json() as GoogleResponse, payload.model));
 }
 
-async function handleResponses(req, res) {
+async function handleResponses(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const auth = getAuthHeader(req);
   if (!auth) {
     sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
@@ -878,14 +940,14 @@ async function handleResponses(req, res) {
 
   try {
     const body = await readBody(req);
-    const payload = JSON.parse(body);
+    const payload = JSON.parse(body) as OpenAIChatPayload & JsonRecord;
 
     if (!isOpenAIModel(payload.model) && !isGrokModel(payload.model)) {
       sendJson(res, 400, { error: { message: `Model ${payload.model} is not supported via /v1/responses. Use claude-* models via /v1/messages.`, type: "invalid_request" } });
       return;
     }
 
-    const upstream = await forwardResponses(payload, auth);
+    const upstream = await forwardResponses(payload as unknown as JsonRecord, auth);
 
     if (!upstream.ok) {
       const text = await upstream.text();
@@ -899,12 +961,12 @@ async function handleResponses(req, res) {
       const data = await upstream.json();
       sendJson(res, 200, data);
     }
-  } catch (e) {
+  } catch (e: unknown) {
     sendJson(res, 500, { error: { message: extractErrorMessage(e), type: "internal_error" } });
   }
 }
 
-async function handleMessages(req, res) {
+async function handleMessages(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const auth = getAuthHeader(req);
   if (!auth) {
     sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
@@ -914,7 +976,7 @@ async function handleMessages(req, res) {
 
   try {
     const body = await readBody(req);
-    const payload = JSON.parse(body);
+    const payload = JSON.parse(body) as JsonRecord & { model: string; stream?: boolean };
 
     if (!isAnthropicModel(payload.model)) {
       sendJson(res, 400, { error: { message: `Model ${payload.model} should use /v1/chat/completions, not /v1/messages.`, type: "invalid_request" } });
@@ -935,7 +997,7 @@ async function handleMessages(req, res) {
       const data = await upstream.json();
       sendJson(res, 200, data);
     }
-  } catch (e) {
+  } catch (e: unknown) {
     sendJson(res, 500, { error: { message: extractErrorMessage(e), type: "internal_error" } });
   }
 }
@@ -947,7 +1009,7 @@ async function handleMessages(req, res) {
  * Grazie Vertex path. Request and response bodies pass through untouched —
  * the Grazie backend speaks the same generateContent schema.
  */
-async function handleGoogle(req, res, url) {
+async function handleGoogle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const auth = getAuthHeader(req);
   if (!auth) {
     sendJson(res, 401, { error: { message: "Not authenticated — run login", type: "auth_error" } });
@@ -983,19 +1045,19 @@ async function handleGoogle(req, res, url) {
       const data = await upstream.json();
       sendJson(res, 200, data);
     }
-  } catch (e) {
+  } catch (e: unknown) {
     sendJson(res, 500, { error: { message: extractErrorMessage(e), type: "internal_error" } });
   }
 }
 
-async function handleModels(req, res) {
+async function handleModels(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const hasDefault = state.defaultAuthHeader !== undefined;
   const auth = getAuthHeader(req) || (!hasDefault ? state.lastAuthHeader : undefined);
   if (hasDefault && !auth) {
     sendJson(res, 401, { error: { message: "Not authenticated — run 'junie-bridge login'", type: "auth_error" } });
     return;
   }
-  let ids = KNOWN_GRAZIE_MODELS;
+  let ids: string[] = [...KNOWN_GRAZIE_MODELS];
   if (auth) {
     try {
       const upstream = await proxyFetch(`${UPSTREAM_BASE}/v1/models`, {
@@ -1003,8 +1065,8 @@ async function handleModels(req, res) {
         signal: AbortSignal.timeout(BALANCE_TIMEOUT_MS),
       });
       if (upstream.ok) {
-        const body = await upstream.json();
-        if (Array.isArray(body?.data)) ids = body.data.map((model) => model.id).filter(Boolean);
+        const body = await upstream.json() as { data?: Array<{ id?: string }> };
+        if (Array.isArray(body?.data)) ids = body.data.map((model) => String(model.id)).filter(Boolean);
       }
     } catch {
       // The maintained catalog is the safe fallback when discovery is unavailable.
@@ -1038,7 +1100,7 @@ async function handleModels(req, res) {
 // Amounts are Credit objects: { "amount": "1969436.7795" }.
 // Accounts without an active licence (plain TRIAL credits) get a 400 here —
 // hence every quota call is best-effort and never fails the balance itself.
-async function grazieQuotaPost(auth, path) {
+async function grazieQuotaPost(auth: string, path: string): Promise<unknown> {
   const upstream = await proxyFetch(`${GRAZIE_AUTH_BASE}${path}`, {
     method: "POST",
     headers: { "Authorization": auth, "Content-Type": "application/json" },
@@ -1049,14 +1111,19 @@ async function grazieQuotaPost(auth, path) {
   return upstream.json();
 }
 
-function creditAmount(credit) {
-  const n = Number(credit?.amount);
+type Credit = { amount: string };
+
+function creditAmount(credit: unknown): number | undefined {
+  const c = credit as Credit | undefined;
+  const n = Number(c?.amount);
   return Number.isFinite(n) ? n : undefined;
 }
 
 // { current, maximum, available } — note that Grazie's "current" is the amount
 // *spent*, not the amount left; "available" is what remains.
-function quotaDetails(details) {
+type QuotaDetailsInput = { current?: Credit; maximum?: Credit; available?: Credit };
+
+function quotaDetails(details: QuotaDetailsInput | undefined): { spent?: number; maximum?: number; available?: number } | undefined {
   if (!details) return undefined;
   return {
     spent: creditAmount(details.current),
@@ -1065,14 +1132,45 @@ function quotaDetails(details) {
   };
 }
 
-function buildQuota(quota, refill) {
+type QuotaBuildInput = {
+  current?: {
+    license?: unknown;
+    current?: Credit;
+    maximum?: Credit;
+    available?: Credit;
+    until?: number;
+    tariffQuota?: QuotaDetailsInput;
+    topUpQuota?: QuotaDetailsInput;
+  };
+};
+
+type RefillBuildInput = {
+  current?: {
+    next?: number;
+    last?: number;
+    tariff?: { amount?: Credit; period?: { millis?: number } };
+  };
+};
+
+function buildQuota(quota: QuotaBuildInput | undefined, refill: RefillBuildInput | undefined):
+  | {
+      license?: unknown;
+      spent?: number;
+      maximum?: number;
+      available: number;
+      until?: number;
+      tariff?: { spent?: number; maximum?: number; available?: number };
+      topUp?: { spent?: number; maximum?: number; available?: number };
+      refill?: { next?: number; last?: number; amount?: number; periodMs?: number };
+    }
+  | undefined {
   const current = quota?.current;
   if (!current) return undefined;
 
   const tariff = quotaDetails(current.tariffQuota);
   const topUp = quotaDetails(current.topUpQuota);
   const available = [tariff?.available, topUp?.available]
-    .filter((n) => typeof n === "number")
+    .filter((n): n is number => typeof n === "number")
     .reduce((a, b) => a + b, 0);
 
   return {
@@ -1092,7 +1190,7 @@ function buildQuota(quota, refill) {
   };
 }
 
-async function handleBalance(req, res) {
+async function handleBalance(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Saved login is authoritative for standalone junie-bridge; ephemeral bridges fall back to last seen auth.
   const hasDefault = state.defaultAuthHeader !== undefined;
   const auth = getAuthHeader(req) || (!hasDefault ? state.lastAuthHeader : undefined);
@@ -1109,8 +1207,8 @@ async function handleBalance(req, res) {
         headers: { "Authorization": auth },
         signal: AbortSignal.timeout(BALANCE_TIMEOUT_MS),
       }),
-      grazieQuotaPost(auth, "/user/v5/quota/get").catch(() => undefined),
-      grazieQuotaPost(auth, "/user/v5/quota/metadata/refill").catch(() => undefined),
+      grazieQuotaPost(auth, "/user/v5/quota/get").catch(() => undefined) as Promise<QuotaBuildInput | undefined>,
+      grazieQuotaPost(auth, "/user/v5/quota/metadata/refill").catch(() => undefined) as Promise<RefillBuildInput | undefined>,
     ]);
 
     if (!test.ok) {
@@ -1118,7 +1216,7 @@ async function handleBalance(req, res) {
       // expired" are very different problems for the user.
       const body = (await test.text().catch(() => "")).trim();
       let detail = body.slice(0, 200);
-      try { detail = JSON.parse(body).message ?? detail; } catch { /* not JSON — use the raw body */ }
+      try { detail = (JSON.parse(body) as { message?: string }).message ?? detail; } catch { /* not JSON — use the raw body */ }
       sendJson(res, test.status, {
         error: {
           message: `Balance check failed: HTTP ${test.status}${detail ? ` — ${detail}` : ""}`,
@@ -1127,7 +1225,7 @@ async function handleBalance(req, res) {
       });
       return;
     }
-    const info = await test.json();
+    const info = await test.json() as { balanceLeft?: number; balanceUnit?: string; licenseType?: string; active?: boolean };
     const details = buildQuota(quota, refill);
 
     sendJson(res, 200, {
@@ -1138,14 +1236,20 @@ async function handleBalance(req, res) {
       active: info.active,
       quota: details,
     });
-  } catch (e) {
+  } catch (e: unknown) {
     sendJson(res, 500, { error: { message: extractErrorMessage(e), type: "internal_error" } });
   }
 }
 
-async function handleConnTest(_req, res) {
+async function handleConnTest(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   const diag = getProxyDiagnostics();
-  const result = {
+  const result: {
+    proxy: string | null;
+    proxyAuth: string;
+    nodeVersion: string;
+    upstream: string;
+    tests: Record<string, { ok: boolean; addresses?: string[]; error?: string; status?: number }>;
+  } = {
     proxy: diag.proxy,
     proxyAuth: diag.auth,
     nodeVersion: process.version,
@@ -1158,17 +1262,18 @@ async function handleConnTest(_req, res) {
     const { promises: dns } = await import("node:dns");
     const host = new URL(UPSTREAM_BASE).hostname;
     const addrs = await dns.resolve4(host);
-    result.tests.dns = { ok: true, addresses: addrs };
-  } catch (e) {
-    result.tests.dns = { ok: false, error: e.message };
+    result.tests["dns"] = { ok: true, addresses: addrs };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.tests["dns"] = { ok: false, error: msg };
   }
 
   // Test 2: HTTPS fetch through proxy
   try {
     const r = await proxyFetch(UPSTREAM_BASE, { method: "GET" });
-    result.tests.fetch = { ok: true, status: r.status };
-  } catch (e) {
-    result.tests.fetch = { ok: false, error: extractErrorMessage(e) };
+    result.tests["fetch"] = { ok: true, status: r.status };
+  } catch (e: unknown) {
+    result.tests["fetch"] = { ok: false, error: extractErrorMessage(e) };
   }
 
   const allOk = Object.values(result.tests).every((t) => t.ok);
@@ -1177,7 +1282,7 @@ async function handleConnTest(_req, res) {
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
-export async function startServer({ verbose = false, host = "127.0.0.1", port = 0, authToken }: { verbose?: boolean; host?: string; port?: number; authToken?: string | (() => string | undefined) } = {}) {
+export async function startServer({ verbose = false, host = "127.0.0.1", port = 0, authToken }: StartServerOptions = {}): Promise<{ server: Server; port: number }> {
   state.verbose = verbose;
   state.defaultAuthHeader = typeof authToken === "function"
     ? () => {
@@ -1190,7 +1295,7 @@ export async function startServer({ verbose = false, host = "127.0.0.1", port = 
       ? (authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`)
       : undefined;
 
-  const server = createServer(async (req, res) => {
+  const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
@@ -1227,9 +1332,11 @@ export async function startServer({ verbose = false, host = "127.0.0.1", port = 
     }
   });
 
-  const boundPort = await new Promise((resolve) => {
+  const boundPort = await new Promise<number>((resolve) => {
     server.listen(port, host, () => {
-      resolve(server.address().port);
+      const addr = server.address();
+      if (addr && typeof addr === "object") resolve((addr as { port: number }).port);
+      else resolve(0);
     });
   });
 

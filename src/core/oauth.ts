@@ -8,6 +8,7 @@
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
 import { proxyFetch } from "./proxy.ts";
+import type { JunieCredentialFile } from "./credentials.ts";
 
 const OAUTH = {
   tokenEndpoint: "https://oauth.account.jetbrains.com/oauth2/token",
@@ -37,17 +38,20 @@ function getJwtExpiresIn(token: string) {
   } catch { return undefined; }
 }
 
-export function junieCredentialsNeedRefresh(credentials: any) {
+export function junieCredentialsNeedRefresh(credentials: { access?: string; refresh?: string; expires?: number } | undefined): boolean {
   if (!credentials?.refresh) return false;
   if (typeof credentials.expires === "number") return credentials.expires <= Date.now();
+  if (!credentials.access) return false;
   const expiresIn = getJwtExpiresIn(credentials.access);
   return expiresIn !== undefined && expiresIn <= 0;
 }
 
+type OAuthCallback = { code: string; state: string };
+
 async function startCallbackServer(signal?: AbortSignal) {
-  let resolveCallback: (value: any) => void;
-  let rejectCallback: (reason?: any) => void;
-  const callbackPromise = new Promise((resolve, reject) => {
+  let resolveCallback!: (value: OAuthCallback) => void;
+  let rejectCallback!: (reason?: unknown) => void;
+  const callbackPromise = new Promise<OAuthCallback>((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
   });
@@ -103,7 +107,13 @@ function buildAuthUrl(port: number, codeChallenge: string, authState: string) {
   return `${OAUTH.loginInitialUrl}?client_id=${OAUTH.clientId}&scope=${encodeURIComponent(OAUTH.scopes)}&state=${authState}&code_challenge=${codeChallenge}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 
-async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string) {
+type TokenResponse = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+};
+
+async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string): Promise<TokenResponse> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -111,21 +121,24 @@ async function exchangeCodeForToken(code: string, codeVerifier: string, redirect
     client_id: OAUTH.clientId,
     redirect_uri: redirectUri,
   });
-  const res: any = await proxyFetch(OAUTH.tokenEndpoint, {
+  const res = await proxyFetch(OAUTH.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
-  return res.json();
+  return res.json() as Promise<TokenResponse>;
 }
+
+export type OAuthLoginCallbacks = {
+  signal?: AbortSignal;
+  onAuth: (params: { url: string }) => void | Promise<void>;
+};
 
 /**
  * Pi-compatible OAuth login function.
- * @param {import("@earendil-works/pi-ai").OAuthLoginCallbacks} callbacks
- * @returns {Promise<import("@earendil-works/pi-ai").OAuthCredentials>}
  */
-export async function junieLogin(callbacks: any) {
+export async function junieLogin(callbacks: OAuthLoginCallbacks): Promise<JunieCredentialFile> {
   const pkce = generatePKCE();
   const authState = randomBytes(16).toString("hex");
   const { server, port, waitForCallback } = await startCallbackServer(callbacks.signal);
@@ -136,10 +149,10 @@ export async function junieLogin(callbacks: any) {
   callbacks.onAuth({ url: authUrl });
 
   try {
-    const callback: any = await waitForCallback();
+    const callback: OAuthCallback = await waitForCallback();
     if (callback.state !== authState) throw new Error("OAuth state mismatch");
 
-    const tokenResponse: any = await exchangeCodeForToken(callback.code, pkce.codeVerifier, redirectUri);
+    const tokenResponse: TokenResponse = await exchangeCodeForToken(callback.code, pkce.codeVerifier, redirectUri);
 
     let expiresIn = tokenResponse.expires_in;
     if (!expiresIn && tokenResponse.access_token) {
@@ -161,16 +174,14 @@ export async function junieLogin(callbacks: any) {
 
 /**
  * Pi-compatible OAuth token refresh function.
- * @param {import("@earendil-works/pi-ai").OAuthCredentials} credentials
- * @returns {Promise<import("@earendil-works/pi-ai").OAuthCredentials>}
  */
-export async function junieRefreshToken(credentials: any) {
+export async function junieRefreshToken(credentials: JunieCredentialFile): Promise<JunieCredentialFile> {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: credentials.refresh,
+    refresh_token: credentials.refresh ?? "",
     client_id: OAUTH.clientId,
   });
-  const res: any = await proxyFetch(OAUTH.tokenEndpoint, {
+  const res = await proxyFetch(OAUTH.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -185,7 +196,7 @@ export async function junieRefreshToken(credentials: any) {
     return credentials;
   }
 
-  const data: any = await res.json();
+  const data: TokenResponse = (await res.json()) as TokenResponse;
 
   let expiresIn = data.expires_in;
   if (!expiresIn && data.access_token) {

@@ -184,10 +184,10 @@ export default async function (pi: ExtensionAPI) {
 
   const oauth = {
     name: "JetBrains Junie",
-    login: junieLogin,
-    refreshToken: junieRefreshToken,
+    login: junieLogin as unknown as (callbacks: unknown) => Promise<unknown>,
+    refreshToken: junieRefreshToken as unknown as (credentials: unknown, signal: unknown) => Promise<unknown>,
     getApiKey: (cred: { access: string }) => cred.access,
-  };
+  } as unknown as NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]>;
 
   // Single provider — OpenAI models inherit provider-level api/baseUrl,
   // Claude models override per-model (api + baseUrl).
@@ -202,7 +202,7 @@ export default async function (pi: ExtensionAPI) {
       ...buildProviderModels("claude", Number(port)),
       ...buildProviderModels("grok", Number(port)),
       ...buildProviderModels("gemini", Number(port)),
-    ] as any,
+    ] as unknown as import("@earendil-works/pi-coding-agent").ProviderModelConfig[],
   });
 
   // Balance tracking after each turn
@@ -462,7 +462,7 @@ export default async function (pi: ExtensionAPI) {
       if (testInfo) {
         lines.push("");
         lines.push("**Connectivity:**");
-        for (const [name, t] of Object.entries(testInfo.tests) as [string, any][]) {
+        for (const [name, t] of Object.entries(testInfo.tests) as Array<[string, { ok: boolean; error?: string; status?: number }]>) {
           const icon = t.ok ? "+" : "!";
           lines.push(`- [${icon}] ${name}: ${t.ok ? `ok${t.status ? ` (${t.status})` : ""}` : t.error}`);
         }

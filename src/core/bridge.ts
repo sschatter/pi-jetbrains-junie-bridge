@@ -1,10 +1,15 @@
-// The core modules intentionally preserve the dynamically shaped wire data of
-// the original JavaScript implementation; consumers add boundary types where
-// the host APIs require them.
-import { startServer } from "./server.ts";
+import { startServer, type StartServerOptions } from "./server.ts";
+import type { Server } from "node:http";
+
+export type JunieBridge = {
+  server: Server;
+  port: number;
+  baseUrl: string;
+  close(): Promise<void>;
+};
 
 /** Start one isolated local bridge for a host adapter. */
-export async function startJunieBridge(options?: any) {
+export async function startJunieBridge(options?: StartServerOptions): Promise<JunieBridge> {
   const { server, port } = await startServer(options);
   const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -20,12 +25,18 @@ export async function startJunieBridge(options?: any) {
   };
 }
 
-export function authorizationHeaders(accessToken?: string) {
+export function authorizationHeaders(accessToken?: string): Record<string, string> {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
+type FetchBridgeInit = RequestInit & { accessToken?: string };
+
 /** Fetch JSON from the local bridge without coupling callers to its port. */
-export async function fetchBridgeJson(bridge: any, path: string, { accessToken, ...init }: any = {}) {
+export async function fetchBridgeJson(
+  bridge: JunieBridge,
+  path: string,
+  { accessToken, ...init }: FetchBridgeInit = {},
+): Promise<{ response: Response; body: unknown }> {
   const response = await fetch(`${bridge.baseUrl}${path}`, {
     ...init,
     headers: {

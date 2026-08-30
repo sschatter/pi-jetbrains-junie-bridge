@@ -1,11 +1,49 @@
 import { fetchBridgeJson } from "./bridge.ts";
+import type { JunieBridge } from "./bridge.ts";
 import { classifyBackendModels } from "./models.ts";
+import type { ModelClassification } from "./models.ts";
+
+export type QuotaBucket = {
+  spent?: number;
+  maximum?: number;
+  available?: number;
+};
+
+export type Balance = {
+  balanceLeft?: number;
+  balanceUnit?: string;
+  licenseType?: string;
+  active?: boolean;
+  quota?: {
+    license?: unknown;
+    spent?: number;
+    maximum?: number;
+    available?: number;
+    until?: number;
+    tariff?: QuotaBucket;
+    topUp?: QuotaBucket;
+    refill?: { next?: number; last?: number; amount?: number; periodMs?: number };
+  };
+};
+
+export type Diagnostics = {
+  balance?: Balance;
+  models?: { data?: Array<{ id?: string }> };
+  connectivity?: { tests?: Record<string, { ok: boolean; error?: string; status?: number; addresses?: string[] }> };
+  proxy?: unknown;
+};
+
+type CollectDiagnosticsOptions = { connectivity?: boolean };
 
 /**
  * Collect operational data concurrently. Callers decide whether to render it
  * as a Pi overlay, an OpenCode toast, or a machine-readable report.
  */
-export async function collectDiagnostics(bridge: any, accessToken?: string, { connectivity = false }: any = {}) {
+export async function collectDiagnostics(
+  bridge: JunieBridge,
+  accessToken?: string,
+  { connectivity = false }: CollectDiagnosticsOptions = {},
+): Promise<Diagnostics> {
   const [balance, models, test] = await Promise.all([
     fetchBridgeJson(bridge, "/junie/balance", { accessToken }),
     fetchBridgeJson(bridge, "/v1/models", { accessToken }),
@@ -13,10 +51,10 @@ export async function collectDiagnostics(bridge: any, accessToken?: string, { co
   ]);
 
   return {
-    balance: balance.body,
-    models: models.body,
-    connectivity: test?.body,
-    proxy: (test?.body as any)?.proxy,
+    balance: balance.body as Balance | undefined,
+    models: models.body as Diagnostics["models"],
+    connectivity: test?.body as Diagnostics["connectivity"],
+    proxy: (test?.body as { proxy?: unknown } | undefined)?.proxy,
   };
 }
 
@@ -29,47 +67,55 @@ const LICENSE_NAMES: Record<string, string> = {
   TRIAL: "JetBrains AI trial",
 };
 
-function formatUsd(value: any) {
+function formatUsd(value: unknown): string | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? `$${(value / CREDITS_PER_USD).toFixed(2)}`
     : undefined;
 }
 
-function quotaSummary(balance: any) {
+function quotaSummary(balance: Balance | undefined): { monthly?: string; topUp?: string } | undefined {
   const tariff = balance?.quota?.tariff;
   const topUp = balance?.quota?.topUp;
   if (!tariff && !topUp) return undefined;
 
   const monthly = tariff?.available !== undefined && tariff?.maximum !== undefined
-    ? `${formatUsd(tariff.available)} / ${formatUsd(tariff.maximum)} left`
-    : formatUsd(tariff?.available);
+     ? `${formatUsd(tariff.available)} / ${formatUsd(tariff.maximum)} left`
+     : formatUsd(tariff?.available);
   const topUpAvailable = formatUsd(topUp?.available);
   return monthly || topUpAvailable ? { monthly, topUp: topUpAvailable } : undefined;
 }
 
-export function availableCredits(balance: any) {
+export function availableCredits(balance: Balance | undefined): number | undefined {
   const available = balance?.quota?.available;
   return typeof available === "number" && Number.isFinite(available)
     ? available / CREDITS_PER_USD
     : undefined;
 }
 
-function quotaCredits(balance: any, bucket: string) {
-  const available = balance?.quota?.[bucket]?.available;
+function quotaCredits(balance: Balance | undefined, bucket: string): number | undefined {
+  const bucketData = (balance?.quota as Record<string, QuotaBucket | undefined> | undefined)?.[bucket];
+  const available = bucketData?.available;
   return typeof available === "number" && Number.isFinite(available)
     ? available / CREDITS_PER_USD
     : undefined;
 }
 
-export function monthlyAvailableCredits(balance: any) {
+export function monthlyAvailableCredits(balance: Balance | undefined): number | undefined {
   return quotaCredits(balance, "tariff");
 }
 
-export function topUpAvailableCredits(balance: any) {
+export function topUpAvailableCredits(balance: Balance | undefined): number | undefined {
   return quotaCredits(balance, "topUp");
 }
 
-export function formatTurnResult({ durationMs, cost, remaining, topUpRemaining }: any) {
+export type TurnResult = {
+  durationMs?: number;
+  cost?: number;
+  remaining?: number;
+  topUpRemaining?: number;
+};
+
+export function formatTurnResult({ durationMs, cost, remaining, topUpRemaining }: TurnResult): string {
   const duration = typeof durationMs === "number" && Number.isFinite(durationMs)
     ? `${Math.max(0, Math.round(durationMs / 1000))}s`
     : "unknown time";
@@ -85,15 +131,15 @@ export function formatTurnResult({ durationMs, cost, remaining, topUpRemaining }
   return `TASK RESULT in ${duration} - cost ${costText} - ${remainingText}${topUpText}`;
 }
 
-function licenseName(licenseType: any) {
+function licenseName(licenseType: unknown): string | undefined {
   if (typeof licenseType !== "string" || licenseType.length === 0) return undefined;
   return LICENSE_NAMES[licenseType] ?? licenseType;
 }
 
-export function formatBalanceToast(balance: any) {
+export function formatBalanceToast(balance: Balance | undefined): string {
   const quota = quotaSummary(balance);
   if (quota) {
-    const parts = [];
+    const parts: string[] = [];
     if (quota.monthly) parts.push(`monthly ${quota.monthly}`);
     if (quota.topUp) parts.push(`top-up ${quota.topUp}`);
     if (parts.length > 0) return `Junie balance: ${parts.join(" · ")}`;
@@ -103,9 +149,9 @@ export function formatBalanceToast(balance: any) {
   return `Junie balance: ${balance.balanceLeft} ${unit}`;
 }
 
-export function formatDiagnosticsReport(diagnostics: any) {
+export function formatDiagnosticsReport(diagnostics: Diagnostics): string {
   const models = Array.isArray(diagnostics.models?.data)
-    ? diagnostics.models.data.map((model: any) => model.id).filter(Boolean)
+    ? diagnostics.models.data.map((model: { id?: string }) => model.id).filter(Boolean) as string[]
     : [];
   const classified = classifyBackendModels(models);
   const balance = diagnostics.balance;
@@ -130,7 +176,7 @@ export function formatDiagnosticsReport(diagnostics: any) {
   const connection = diagnostics.connectivity;
   if (connection?.tests) {
     lines.push("", "Connectivity:");
-    for (const [name, result] of Object.entries(connection.tests) as [string, any][]) {
+    for (const [name, result] of Object.entries(connection.tests) as Array<[string, { ok: boolean; error?: string }]>) {
       lines.push(`- ${name}: ${result.ok ? "ok" : `failed${result.error ? ` (${result.error})` : ""}`}`);
     }
   } else {
@@ -138,21 +184,22 @@ export function formatDiagnosticsReport(diagnostics: any) {
   }
 
   if (diagnostics.proxy) {
+    const proxyInfo = diagnostics.proxy as { proxy?: unknown; auth?: string };
     lines.push("", "Proxy:");
-    lines.push(`- configured: ${diagnostics.proxy.proxy ? "yes" : "no"}`);
-    if (diagnostics.proxy.proxy) lines.push(`- URL: ${diagnostics.proxy.proxy}`);
-    if (diagnostics.proxy.auth && diagnostics.proxy.auth !== "none") lines.push(`- authentication: ${diagnostics.proxy.auth}`);
+    lines.push(`- configured: ${proxyInfo.proxy ? "yes" : "no"}`);
+    if (proxyInfo.proxy) lines.push(`- URL: ${proxyInfo.proxy}`);
+    if (proxyInfo.auth && proxyInfo.auth !== "none") lines.push(`- authentication: ${proxyInfo.auth}`);
   }
 
   lines.push("", `Backend models: ${models.length}`);
   lines.push(`- verified and selectable: ${classified.supported.length}`);
   if (classified.blacklisted.length > 0) {
     lines.push("- blacklisted:");
-    for (const model of classified.blacklisted as any[]) lines.push(`  - ${model.id}: ${model.reason}`);
+    for (const model of classified.blacklisted as ModelClassification[]) lines.push(`  - ${model.id}: ${(model as { reason?: string }).reason ?? ""}`);
   }
   if (classified.unknown.length > 0) {
     lines.push("- unknown (diagnostic-only):");
-    for (const model of classified.unknown as any[]) lines.push(`  - ${model.id}`);
+    for (const model of classified.unknown as ModelClassification[]) lines.push(`  - ${model.id}`);
   }
 
   return lines.join("\n");

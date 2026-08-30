@@ -71,11 +71,22 @@ export function classifyModel(id: string) {
   return { id, status: MODEL_CLASSIFICATIONS.UNKNOWN };
 }
 
-export function classifyBackendModels(ids: string[]) {
-  const result: { supported: any[]; blacklisted: any[]; unknown: any[] } = { supported: [], blacklisted: [], unknown: [] };
+export type ModelClassification = ReturnType<typeof classifyModel>;
+
+export function classifyBackendModels(ids: string[]): {
+  supported: ModelClassification[];
+  blacklisted: ModelClassification[];
+  unknown: ModelClassification[];
+} {
+  const result: {
+    supported: ModelClassification[];
+    blacklisted: ModelClassification[];
+    unknown: ModelClassification[];
+  } = { supported: [], blacklisted: [], unknown: [] };
   for (const id of ids) {
     const classification = classifyModel(id);
-    (result as any)[classification.status].push(classification);
+    const bucket = classification.status as keyof typeof result;
+    (result[bucket] as ModelClassification[]).push(classification);
   }
   return result;
 }
@@ -178,7 +189,23 @@ const PREFIX_BY_TYPE: Record<string, string> = {
  * @param {"openai" | "claude" | "grok" | "gemini"} type
  * @param {number} [port] — required for claude/gemini (per-model baseUrl override)
  */
-export function buildProviderModels(type: string, port?: number) {
+export type ProviderType = "openai" | "claude" | "grok" | "gemini";
+
+export type BuiltProviderModel = {
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: string[];
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  contextWindow: number;
+  maxTokens: number;
+  compat?: typeof OPENAI_COMPAT | typeof CLAUDE_COMPAT;
+  api?: string;
+  baseUrl?: string;
+  thinkingLevelMap?: Record<string, string>;
+};
+
+export function buildProviderModels(type: ProviderType, port?: number): BuiltProviderModel[] {
   const prefix = PREFIX_BY_TYPE[type];
   // Gemini goes through pi-ai's Google client, which ignores the OpenAI/Claude
   // compat flags — leave them off rather than sending misleading ones.
@@ -188,7 +215,7 @@ export function buildProviderModels(type: string, port?: number) {
     .filter((id) => id.startsWith(prefix) && classifyModel(id).status === MODEL_CLASSIFICATIONS.SUPPORTED)
     .map((id) => {
       const meta = getModelMeta(id);
-      const model: any = {
+      const model: BuiltProviderModel = {
         id,
         name: id + " (Junie)",
         reasoning: meta.reasoning,

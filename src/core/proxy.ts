@@ -11,10 +11,11 @@
  * `globalThis.fetch`.
  */
 
-import { request as httpRequest } from "node:http";
+import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { connect as tlsConnect } from "node:tls";
 import { Readable } from "node:stream";
+import type { Socket } from "node:net";
 
 // Statuses where the fetch spec forbids a body; passing one to `new Response`
 // throws, so they get an explicit null.
@@ -41,8 +42,8 @@ function getProxyAuth(parsedProxyUrl: URL) {
 }
 
 /** CONNECT through the proxy, resolving with the raw tunnelled socket. */
-function openTunnel(proxyUrl: string, host: string, port: string | number) {
-  return new Promise((resolve, reject) => {
+function openTunnel(proxyUrl: string, host: string, port: string | number): Promise<Socket> {
+  return new Promise<Socket>((resolve, reject) => {
     const proxy = new URL(proxyUrl);
     const proxyIsTls = proxy.protocol === "https:";
     const target = `${host}:${port}`;
@@ -59,7 +60,7 @@ function openTunnel(proxyUrl: string, host: string, port: string | number) {
       headers,
     });
 
-    req.once("connect", (res, socket) => {
+    req.once("connect", (res: IncomingMessage, socket: Socket) => {
       if (res.statusCode !== 200) {
         socket.destroy();
         // Keep the status code in the message — extractErrorMessage() in
@@ -75,7 +76,7 @@ function openTunnel(proxyUrl: string, host: string, port: string | number) {
 }
 
 /** Node's header bag (values may be arrays, e.g. set-cookie) → Headers. */
-function toHeaders(nodeHeaders: any) {
+function toHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
   for (const [name, value] of Object.entries(nodeHeaders)) {
     if (value === undefined) continue;
@@ -85,26 +86,27 @@ function toHeaders(nodeHeaders: any) {
 }
 
 /** Request over an already-established tunnel, resolved as a fetch Response. */
-function requestOverSocket(socket: any, target: URL, options: any) {
+function requestOverSocket(socket: Socket, target: URL, options: RequestInit): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const body = options.body == null ? null
-      : typeof options.body === "string" ? options.body
-      : options.body instanceof URLSearchParams ? options.body.toString()
-      : String(options.body); // URLSearchParams and friends
+    const rawBody: BodyInit | null | undefined = options.body as BodyInit | null | undefined;
+    const body = rawBody == null ? null
+      : typeof rawBody === "string" ? rawBody
+      : rawBody instanceof URLSearchParams ? rawBody.toString()
+      : String(rawBody); // URLSearchParams and friends
 
-    const headers: Record<string, any> = { ...(options.headers || {}) };
+    const headers: Record<string, string> = { ...(options.headers as Record<string, string> | undefined ?? {}) };
     if (body !== null && !Object.keys(headers).some((h) => h.toLowerCase() === "content-length")) {
-      headers["Content-Length"] = Buffer.byteLength(body);
+      headers["Content-Length"] = String(Buffer.byteLength(body));
     }
 
     const req = httpsRequest({
       method: options.method ?? "GET",
       path: `${target.pathname}${target.search}`,
       headers: { ...headers, host: target.host },
-      createConnection: () => tlsConnect({ socket, servername: target.hostname }),
-    }, (res) => {
+      createConnection: () => tlsConnect({ socket: socket as unknown as Socket, servername: target.hostname } as unknown as Parameters<typeof tlsConnect>[0]),
+    }, (res: IncomingMessage) => {
       const status = res.statusCode ?? 502;
-      resolve(new Response(NULL_BODY_STATUS.has(status) ? null : (Readable.toWeb(res) as any), {
+      resolve(new Response(NULL_BODY_STATUS.has(status) ? null : Readable.toWeb(res as unknown as Readable) as unknown as BodyInit, {
         status,
         statusText: res.statusMessage,
         headers: toHeaders(res.headers),
@@ -124,7 +126,7 @@ function requestOverSocket(socket: any, target: URL, options: any) {
  * costs one extra handshake per request on the proxy path, which is not worth
  * a dependency for the request volume this bridge sees.
  */
-export async function proxyFetch(url: string, options: any = {}) {
+export async function proxyFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const proxyUrl = getProxyUrl();
   if (!proxyUrl) return globalThis.fetch(url, options);
 
