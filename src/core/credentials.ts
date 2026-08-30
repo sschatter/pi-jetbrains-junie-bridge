@@ -10,17 +10,6 @@ export function credentialsPath(): string {
   return join(base, "junie-bridge", "credentials.json");
 }
 
-// Legacy locations from when the package was named `junie-openai`. Read as a
-// fallback so an existing login isn't orphaned by the rename; new saves always
-// go to credentialsPath().
-function legacyCredentialsPaths(): string[] {
-  const paths: string[] = [];
-  if (process.env.JUNIE_OPENAI_CREDENTIALS) paths.push(process.env.JUNIE_OPENAI_CREDENTIALS);
-  const base = process.env.APPDATA ?? join(process.env.HOME ?? process.env.USERPROFILE ?? ".", ".config");
-  paths.push(join(base, "junie-openai", "credentials.json"));
-  return paths;
-}
-
 export async function saveCredentialsFile(credentials: JunieCredentialFile): Promise<string> {
   const file = credentialsPath();
   await mkdir(dirname(file), { recursive: true });
@@ -36,16 +25,6 @@ export async function readCredentialsFile(): Promise<JunieCredentialFile | undef
     if (!creds?.access) return undefined;
     return creds as JunieCredentialFile;
   } catch {
-    // Fall back to the legacy `junie-openai` location before giving up.
-    for (const legacyPath of legacyCredentialsPaths()) {
-      try {
-        const raw = await readFile(legacyPath, "utf8");
-        const creds = JSON.parse(raw) as Partial<JunieCredentialFile>;
-        if (creds?.access) return creds as JunieCredentialFile;
-      } catch {
-        continue;
-      }
-    }
     return undefined;
   }
 }
