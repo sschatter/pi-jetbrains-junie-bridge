@@ -151,11 +151,20 @@ Invoke-RestMethod http://127.0.0.1:8787/junie/test
 
 # OpenAI-shaped calls (all three families via the universal endpoint, requires login first):
 # openai (also /v1/responses for Responses API):
-curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"openai-gpt-5-2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d '{"model":"openai-gpt-5-2","messages":[{"role":"user","content":"hi"}]}'
 # universal translation — claude/gemini via OpenAI shape (src/core/server.ts:239-597):
-curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"claude-sonnet-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
-curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"gemini-3.5-flash-lite\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
-```
+curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d '{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hi"}]}'
+curl http://127.0.0.1:8787/v1/chat/completions -H "Content-Type: application/json" -d '{"model":"gemini-3.5-flash-lite","messages":[{"role":"user","content":"hi"}]}'
+
+# native endpoints (same login, no Authorization header):
+# Anthropic — POST /v1/messages (src/core/server.ts:handleMessages):
+curl http://127.0.0.1:8787/v1/messages -H "Content-Type: application/json" -d '{"model":"claude-sonnet-5","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}'
+# OpenAI Responses API — POST /v1/responses (src/core/server.ts:handleResponses):
+curl http://127.0.0.1:8787/v1/responses -H "Content-Type: application/json" -d '{"model":"openai-gpt-5-2","input":"hi"}'
+# Google — POST /google/v1beta/models/<model>:generateContent (src/core/server.ts:handleGoogle):
+curl http://127.0.0.1:8787/google/v1beta/models/gemini-3.5-flash-lite:generateContent -H "Content-Type: application/json" -d '{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}'
+# Google streaming — :streamGenerateContent?alt=sse
+curl http://127.0.0.1:8787/google/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse -H "Content-Type: application/json" -d '{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}'
 
 Balance/quota details: `balanceLeft`/`balanceUnit` from `GET /auth/test`, tariff/topUp split from `POST /user/v5/quota/get` + `/user/v5/quota/metadata/refill` — see `handleBalance` `src/core/server.ts:1080`. Credentials path: `src/core/credentials.ts:7`.
 
