@@ -289,8 +289,8 @@ bridge:
 1. Registers OpenAI models with `api: "openai-responses"`, `reasoning: true`, and a
    `thinkingLevelMap` mapping Pi's thinking levels to the `ReasoningEffort` values
    (`off → none`, `xhigh`/`max → xhigh`; `minimal/low/medium/high` pass through).
-   See `buildProviderModels` in `lib/models.mjs`.
-2. Adds a `/v1/responses` route (`handleResponses` in `lib/server.mjs`) that forwards
+   See `buildProviderModels` in `src/core/models.ts`.
+2. Adds a `/v1/responses` route (`handleResponses` in `src/core/server.ts`) that forwards
    to the ingrazzio `/v1/responses` endpoint using the same OpenAI headers. The payload
    is sanitized against `RESPONSES_ALLOWED` (fields Pi sends that the backend doesn't
    understand — e.g. `max_output_tokens`, `service_tier` — are dropped).
@@ -399,7 +399,7 @@ purely a regex match on the assistant message's `errorMessage`, against
 **The bridge needs no special handling here.** Grazie is a pure passthrough for
 these errors: it returns the upstream provider's original error body, and the
 bridge forwards it verbatim in `error.message` (`sendJson(res, upstream.status, …)`
-in every handler in `lib/server.mjs`). So the message Pi sees still contains the
+in every handler in `src/core/server.ts`). So the message Pi sees still contains the
 native provider phrasing that Pi already knows.
 
 Verified 2026-07-28 against the live backend, all four families:
@@ -419,8 +419,8 @@ Two things worth remembering:
   400 costs 0 credits — confirmed by reading `/junie/balance` before and after all
   four probes (balance unchanged to the cent). This makes overflow a cheap probing
   tool, not something to avoid.
-- **The declared windows are exact.** The `contextWindow` values in `lib/models.mjs`
-  match what the backend enforces (500k Grok, 1M Claude, 1048576 Gemini).
+- **The declared windows are exact.** The `contextWindow` values in `src/core/models.ts`
+   match what the backend enforces (500k Grok, 1M Claude, 1048576 Gemini).
 
 If a future model family *does* get wrapped in a Grazie-specific error envelope,
 the fix belongs in the extension, not the proxy: a `pi.on("message_end", …)`
@@ -434,11 +434,11 @@ When updating to a new Junie CLI version:
 
 1. Download the new release ZIP or extract from npm package
 2. Extract the JAR and run the decompile commands above
-3. Compare model lists — add new models to `KNOWN_GRAZIE_MODELS` and `MODEL_METADATA` in `lib/models.mjs`
-4. For new OpenAI/Grok models, add the ID mapping to `OPENAI_MODEL_MAP` / `GROK_MODEL_MAP` in `lib/server.mjs` (Gemini IDs need no mapping — they are used verbatim)
-5. Update the `Grazie-Agent` version in `lib/server.mjs`
+3. Compare model lists — add new models to `KNOWN_GRAZIE_MODELS` and `MODEL_METADATA` in `src/core/models.ts`
+4. For new OpenAI/Grok models, add the ID mapping to `OPENAI_MODEL_MAP` / `GROK_MODEL_MAP` in `src/core/server.ts` (Gemini IDs need no mapping — they are used verbatim)
+5. Update the `Grazie-Agent` version in `src/core/server.ts`
 6. Check if OAuth config or API endpoints changed (unlikely but worth verifying)
-7. Verify OpenAI models still use `api: "openai-responses"` and that `RESPONSES_ALLOWED` (in `lib/server.mjs`) still matches the upstream `CreateResponsePayload` schema
+7. Verify OpenAI models still use `api: "openai-responses"` and that `RESPONSES_ALLOWED` (in `src/core/server.ts`) still matches the upstream `CreateResponsePayload` schema
 
 ## Version History
 
@@ -446,6 +446,6 @@ When updating to a new Junie CLI version:
 |--------------|-------------------|---------|
 | 2026-07-28 | v2530.1 (nightly) | Added xAI (`grok-4-3`, `grok-4-5`) and Google (5 Gemini 3 models). Both were reachable all along with a plain subscription token — the blocker was routing, not auth: Grok needs `X-LLM-Model: grok` on `/v1/responses` (never `/v1/chat/completions`), Google needs the Vertex-style `generateContent` path. See *Provider Routing*. `deepseek-v4-flash` remains unreachable (AliCloud route returns empty 404s). |
 | 2026-07-27 | v2144.7 | Added `claude-opus-5`. It is served by the Grazie backend before it shows up in the IntelliJ/Junie model picker (same as the gpt-5.6 models were). Found via llm24.net, verified live (see *Probing Models Without the JAR*). |
-| 2026-07-14 | v2144.7 | Route OpenAI models through the OpenAI Responses API (`/v1/responses`) instead of `/v1/chat/completions`, so reasoning effort can be combined with function tools (fixes the `reasoning_effort ... not supported ... in /v1/chat/completions` error on gpt-5.6). OpenAI models now register with `api: "openai-responses"`, `reasoning: true`, and a `thinkingLevelMap`. Added `handleResponses`/`RESPONSES_ALLOWED` in `lib/server.mjs`. |
+| 2026-07-14 | v2144.7 | Route OpenAI models through the OpenAI Responses API (`/v1/responses`) instead of `/v1/chat/completions`, so reasoning effort can be combined with function tools (fixes the `reasoning_effort ... not supported ... in /v1/chat/completions` error on gpt-5.6). OpenAI models now register with `api: "openai-responses"`, `reasoning: true`, and a `thinkingLevelMap`. Added `handleResponses`/`RESPONSES_ALLOWED` in `src/core/server.ts`. |
 | 2026-07-04 | v2144.7 | Added claude-sonnet-5, claude-opus-4-8, claude-fable-5, openai-gpt-5-5. Updated Grazie-Agent version from 888.219 to 2144.7. Fixed model capabilities: Claude 4.6+ models have 1M context / 128k output (was incorrectly 200k/16k). OpenAI 5.2/5.3 have 400k context, 5.4/5.5 have 1M (was all incorrectly ~1M). Removed unavailable models (5.1 series, sonnet-4-5, opus-4-5). |
 | Initial | v1468.30 | Original model list and configuration. |

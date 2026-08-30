@@ -20,25 +20,37 @@ Install the package as an OpenCode server plugin:
 opencode plugin pi-jetbrains-junie-bridge
 ```
 
-Restart OpenCode after installation. The plugin registers `junie` as a custom
-provider, starts its own local bridge, stores credentials in OpenCode's
-credential store, and provides the verified Junie models without a manual
-provider block.
+Restart OpenCode after installation. The plugin registers three sibling
+providers on equal footing (`junie-openai` via `@ai-sdk/openai`, `junie-google`
+via `@ai-sdk/google`, `junie-anthropic` via `@ai-sdk/anthropic`), starts its
+own local bridge, and reads JetBrains Junie OAuth credentials from a shared file
+(`$JUNIE_BRIDGE_CREDENTIALS`, else `%APPDATA%/junie-bridge/credentials.json` /
+`~/.config/junie-bridge/credentials.json`) — the same file the `junie-bridge`
+server uses. A single login covers all three providers. The token is re-read and
+refreshed before every request via the `chat.headers` hook.
 
 OpenCode's `/connect` list is sourced from its built-in provider catalog and
 does not show custom plugin providers as **JetBrains Junie**. To authenticate,
 run this from PowerShell or another terminal:
 
 ```bash
-opencode auth login --provider junie
+opencode auth login --provider junie-openai
 ```
 
-Alternatively, choose **Other** in `/connect`, enter `junie` as the provider
-ID, and choose the Junie login method. After login, select models with
-`junie/<model-id>`.
+Alternatively, choose **Other** in `/connect`, enter `junie-openai` (or
+`junie-google` / `junie-anthropic`) as the provider ID, and choose the Junie
+login method. After login, select models with `junie-openai/<model-id>`,
+`junie-anthropic/<model-id>` or `junie-google/<model-id>` (e.g.
+`junie-openai/openai-gpt-5-2`). You can also authenticate once with the shared
+login:
 
-Pi and OpenCode keep separate credentials and bridge instances, so both hosts may
-run at the same time.
+```bash
+npx junie-bridge login
+```
+
+Pi keeps its own credential store, while OpenCode and the standalone
+`junie-bridge` server share the same file and bridge logic — each host still
+runs its own ephemeral bridge, so Pi and OpenCode may run at the same time.
 
 ### Standalone OpenAI-compatible server
 
@@ -57,7 +69,7 @@ npx junie-bridge --port 8787
 ```
 
 The login stores a refreshable credential in the user profile (override its
-location with `JUNIE_OPENAI_CREDENTIALS`). Requests may still provide their own
+location with `JUNIE_BRIDGE_CREDENTIALS`). Requests may still provide their own
 `Authorization: Bearer` header, which takes precedence over the saved login.
 
 The server listens on `127.0.0.1` by default. Set `JUNIE_HOST` or `JUNIE_PORT`, or
@@ -84,16 +96,20 @@ Add the plugin file to OpenCode's config instead:
 
 ```json
 {
-  "plugin": [
-    "file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/src/entries/opencode.ts"
-  ]
+  "plugin": ["file:///C:/Users/you/path/to/pi-jetbrains-junie-bridge/src/entries/opencode.ts"]
 }
 ```
 
-Put this in `$USERPROFILE/.config/opencode/opencode.jsonc`, or in a project
+Put this in `$USERPROFILE/.config/opencode/opencode.jsonc` (or
+`%USERPROFILE%\.config\opencode\opencode.jsonc` on Windows), or in a project
 `opencode.jsonc` for project-only loading. Replace the path with the absolute
 location of your checkout and restart OpenCode, then authenticate with the
-command above.
+command above. `src/entries/opencode.ts` re-exports the three family plugins
+(`opencode-openai.ts` / `opencode-google.ts` / `opencode-anthropic.ts` via
+`src/entries/opencode-plugin.ts`) as enumerated exports, so a single entry
+provides `junie-openai`, `junie-google` and `junie-anthropic`. The three
+`opencode-*.ts` files remain available if you prefer to load families
+individually.
 
 ## Features
 

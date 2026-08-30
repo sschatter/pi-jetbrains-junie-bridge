@@ -92,16 +92,18 @@ npx pi remove junie-bridge
 
 The package exports three sibling plugins on equal footing (`AGENTS.md`): `junie-openai` (`@ai-sdk/openai`, `${bridge}/v1`), `junie-google` (`@ai-sdk/google`, `${bridge}/google/v1beta`), `junie-anthropic` (`@ai-sdk/anthropic`, `${bridge}/v1`). Registered in `src/entries/opencode-*.ts` via `src/entries/opencode-plugin.ts:34-53`.
 
-Auth is **not** in OpenCode's auth store. The plugin reads/writes `%APPDATA%\junie-bridge\credentials.json` — same file as `junie-bridge` — and refreshes before every request via `chat.headers`. One login covers all three providers (see `AGENTS.md`).
+Auth is **not** in OpenCode's auth store. The plugin reads/writes `%APPDATA%\junie-bridge\credentials.json` (or `$JUNIE_BRIDGE_CREDENTIALS` if set; `~/.config/junie-bridge/credentials.json` on Unix) — same file as `junie-bridge` — and refreshes before every request via `chat.headers`. One login covers all three providers (see `AGENTS.md`). Legacy env var `JUNIE_OPENAI_CREDENTIALS` and `junie-openai/` paths removed in `4602884` are no longer read.
 
 ```powershell
 # local checkout — add file plugin to opencode.jsonc (do NOT pass a Windows dir to `opencode plugin`):
 # $env:USERPROFILE\.config\opencode\opencode.jsonc  or .\.opencode.jsonc
-# { "plugin": ["file:///C:/Users/MyUser/IdeaProjects/junie-bridge/src/entries/opencode-openai.ts"] }
-# repeat for opencode-google.ts / opencode-anthropic.ts or use the npm package
+# { "plugin": ["file:///C:/Users/MyUser/IdeaProjects/junie-bridge/src/entries/opencode.ts"] }
+# (single entry provides all three families via enumerated exports; the three
+#  opencode-*.ts files remain available if you prefer to load families individually)
+# or use the npm package
 
-# installed package:
-opencode plugin junie-bridge  # then restart opencode
+# installed package (npm name is pi-jetbrains-junie-bridge):
+opencode plugin pi-jetbrains-junie-bridge  # then restart opencode
 
 # authenticate (any one covers all three):
 opencode auth login --provider junie-openai
@@ -119,7 +121,7 @@ npx opencode run -m junie-google/gemini-3.5-flash-lite "say hi"
 # /junie   (tool junie_status + /junie command, src/entries/opencode-plugin.ts:169)
 ```
 
-If `credentials.json` is missing or the refresh token is dead, the plugin opens the browser itself on the next request (see `AGENTS.md`). Pi and OpenCode keep separate bridges/credentials, so both can run simultaneously.
+If `credentials.json` is missing or the refresh token is dead, the plugin opens the browser itself on the next request (see `AGENTS.md`). Pi keeps its own credential store and bridge, while OpenCode and `junie-bridge` share the same file (`$JUNIE_BRIDGE_CREDENTIALS` override); each host still runs its own ephemeral bridge, so Pi and OpenCode may run at the same time.
 
 ## Standalone OpenAI-compatible server
 
