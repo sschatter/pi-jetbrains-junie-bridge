@@ -1,16 +1,28 @@
 {
   "name": "pi-jetbrains-junie-bridge",
-  "version": "1.3.2",
-  "description": "Pi extension that connects Pi coding agent with JetBrains Junie as the AI backend",
+  "version": "1.3.3",
+  "description": "Pi extension, OpenCode plugin and OpenAI-compatible server to connect coding agents with JetBrains Junie",
   "type": "module",
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./src/entries/pi.ts"
     ]
+  },
+  "oc-plugin": [
+    "server"
+  ],
+  "exports": {
+    ".": "./src/entries/junie-bridge.ts",
+    "./server": "./src/entries/opencode.ts"
+  },
+  "main": "./src/entries/junie-bridge.ts",
+  "bin": {
+    "junie-bridge": "./src/entries/junie-bridge.ts"
   },
   "keywords": [
     "pi",
     "pi-package",
+    "opencode-plugin",
     "junie",
     "jetbrains",
     "coding-agent",
@@ -27,15 +39,24 @@
   },
   "homepage": "https://github.com/sschatter/pi-jetbrains-junie-bridge#readme",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18.0"
   },
   "files": [
-    "index.ts",
-    "lib/",
+    "src/",
     "docs/",
     "README.md"
   ],
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "junie-bridge": "node src/entries/junie-bridge.ts",
+    "test": "vitest run"
+  },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.23"
   }
 }

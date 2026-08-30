@@ -7,7 +7,8 @@
 
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
-import { proxyFetch } from "./proxy.mjs";
+import { proxyFetch } from "./proxy.ts";
+import type { JunieCredentialFile } from "./credentials.ts";
 
 const OAUTH = {
   tokenEndpoint: "https://oauth.account.jetbrains.com/oauth2/token",
@@ -24,7 +25,7 @@ function generatePKCE() {
   return { codeVerifier, codeChallenge };
 }
 
-function getJwtExpiresIn(token) {
+function getJwtExpiresIn(token: string) {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return undefined;
@@ -37,14 +38,25 @@ function getJwtExpiresIn(token) {
   } catch { return undefined; }
 }
 
-async function startCallbackServer(signal) {
-  let resolveCallback, rejectCallback;
-  const callbackPromise = new Promise((resolve, reject) => {
+export function junieCredentialsNeedRefresh(credentials: { access?: string; refresh?: string; expires?: number } | undefined): boolean {
+  if (!credentials?.refresh) return false;
+  if (typeof credentials.expires === "number") return credentials.expires <= Date.now();
+  if (!credentials.access) return false;
+  const expiresIn = getJwtExpiresIn(credentials.access);
+  return expiresIn !== undefined && expiresIn <= 0;
+}
+
+type OAuthCallback = { code: string; state: string };
+
+async function startCallbackServer(signal?: AbortSignal) {
+  let resolveCallback!: (value: OAuthCallback) => void;
+  let rejectCallback!: (reason?: unknown) => void;
+  const callbackPromise = new Promise<OAuthCallback>((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
   });
 
-  const server = createServer((req, res) => {
+  const handler = (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const code = url.searchParams.get("code");
     const reqState = url.searchParams.get("state");
@@ -58,44 +70,71 @@ async function startCallbackServer(signal) {
     }
     if (code && reqState) {
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end("<html><body><h1>Authentication Successful</h1><p>You can close this window and return to Pi.</p></body></html>");
+      res.end("<html><body><h1>Authentication Successful</h1><p>You can close this window and return to the application.</p></body></html>");
       resolveCallback({ code, state: reqState });
       return;
     }
     res.writeHead(404);
     res.end();
-  });
+  };
+
+  let activeServer: ReturnType<typeof createServer> | undefined;
 
   // Respect abort signal
   if (signal) {
     signal.addEventListener("abort", () => {
       rejectCallback(new Error("Login aborted"));
-      server.close();
+      activeServer?.close();
     }, { once: true });
   }
 
-  const port = await new Promise((resolve, reject) => {
-    let current = OAUTH.callbackPortStart;
-    const tryPort = () => {
-      if (current > OAUTH.callbackPortEnd) {
-        reject(new Error(`Cannot start OAuth callback server on ports ${OAUTH.callbackPortStart}-${OAUTH.callbackPortEnd}`));
-        return;
-      }
-      server.once("error", () => { current++; tryPort(); });
-      server.listen(current, "localhost", () => resolve(current));
-    };
-    tryPort();
-  });
+  let port: number | undefined;
+  let lastError: unknown;
+  for (let current = OAUTH.callbackPortStart; current <= OAUTH.callbackPortEnd; current++) {
+    const server = createServer(handler);
+    activeServer = server;
+    const result = await new Promise<number | null>((resolve) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {
+          server.close(() => resolve(null));
+        } else {
+          lastError = err;
+          server.close(() => resolve(null));
+        }
+      };
+      server.once("error", onError);
+      server.listen(current, "localhost", () => {
+        server.removeListener("error", onError);
+        resolve(current);
+      });
+    });
+    if (result !== null && lastError === undefined) {
+      port = result;
+      break;
+    }
+    if (lastError) break;
+  }
 
-  return { server, port, waitForCallback: () => callbackPromise };
+  if (port === undefined) {
+    if (lastError) throw lastError;
+    throw new Error(`Cannot start OAuth callback server on ports ${OAUTH.callbackPortStart}-${OAUTH.callbackPortEnd}`);
+  }
+
+  return { server: activeServer!, port, waitForCallback: () => callbackPromise };
 }
 
-function buildAuthUrl(port, codeChallenge, authState) {
+function buildAuthUrl(port: number, codeChallenge: string, authState: string) {
   const redirectUri = `http://localhost:${port}`;
   return `${OAUTH.loginInitialUrl}?client_id=${OAUTH.clientId}&scope=${encodeURIComponent(OAUTH.scopes)}&state=${authState}&code_challenge=${codeChallenge}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 
-async function exchangeCodeForToken(code, codeVerifier, redirectUri) {
+type TokenResponse = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+};
+
+async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string): Promise<TokenResponse> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -109,15 +148,18 @@ async function exchangeCodeForToken(code, codeVerifier, redirectUri) {
     body,
   });
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
-  return res.json();
+  return res.json() as Promise<TokenResponse>;
 }
+
+export type OAuthLoginCallbacks = {
+  signal?: AbortSignal;
+  onAuth: (params: { url: string }) => void | Promise<void>;
+};
 
 /**
  * Pi-compatible OAuth login function.
- * @param {import("@earendil-works/pi-ai").OAuthLoginCallbacks} callbacks
- * @returns {Promise<import("@earendil-works/pi-ai").OAuthCredentials>}
  */
-export async function junieLogin(callbacks) {
+export async function junieLogin(callbacks: OAuthLoginCallbacks): Promise<JunieCredentialFile> {
   const pkce = generatePKCE();
   const authState = randomBytes(16).toString("hex");
   const { server, port, waitForCallback } = await startCallbackServer(callbacks.signal);
@@ -128,10 +170,10 @@ export async function junieLogin(callbacks) {
   callbacks.onAuth({ url: authUrl });
 
   try {
-    const callback = await waitForCallback();
+    const callback: OAuthCallback = await waitForCallback();
     if (callback.state !== authState) throw new Error("OAuth state mismatch");
 
-    const tokenResponse = await exchangeCodeForToken(callback.code, pkce.codeVerifier, redirectUri);
+    const tokenResponse: TokenResponse = await exchangeCodeForToken(callback.code, pkce.codeVerifier, redirectUri);
 
     let expiresIn = tokenResponse.expires_in;
     if (!expiresIn && tokenResponse.access_token) {
@@ -153,13 +195,11 @@ export async function junieLogin(callbacks) {
 
 /**
  * Pi-compatible OAuth token refresh function.
- * @param {import("@earendil-works/pi-ai").OAuthCredentials} credentials
- * @returns {Promise<import("@earendil-works/pi-ai").OAuthCredentials>}
  */
-export async function junieRefreshToken(credentials) {
+export async function junieRefreshToken(credentials: JunieCredentialFile): Promise<JunieCredentialFile> {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: credentials.refresh,
+    refresh_token: credentials.refresh ?? "",
     client_id: OAUTH.clientId,
   });
   const res = await proxyFetch(OAUTH.tokenEndpoint, {
@@ -167,9 +207,17 @@ export async function junieRefreshToken(credentials) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok) throw new Error(`Token refresh failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    // A failed refresh (e.g. a revoked/invalid refresh token) must not abort the
+    // caller — OpenCode invokes this on plugin load to proactively refresh stored
+    // credentials, and a thrown error there prevents the whole provider (and its
+    // models) from registering. Return the credentials we already have so the host
+    // can attempt the request and surface a real auth error / trigger re-login.
+    console.error(`[junie] token refresh failed: ${res.status} ${await res.text()}`);
+    return credentials;
+  }
 
-  const data = await res.json();
+  const data: TokenResponse = (await res.json()) as TokenResponse;
 
   let expiresIn = data.expires_in;
   if (!expiresIn && data.access_token) {
