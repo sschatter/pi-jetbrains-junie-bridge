@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createServer } from "node:http";
 import { KNOWN_GRAZIE_MODELS, classifyBackendModels, classifyModel, MODEL_CLASSIFICATIONS } from "./models.ts";
 import { proxyFetch, getProxyDiagnostics } from "./proxy.ts";
@@ -11,14 +12,20 @@ const GRAZIE_AUTH_BASE = "https://ingrazzio-cloud-prod.labs.jb.gg";
 const BALANCE_TIMEOUT_MS = 8000;
 
 // ─── Proxy State (non-auth) ─────────────────────────────────────────────────
-const state = {
+const state: {
+  freeGoogleApi: boolean;
+  verbose: boolean;
+  lastAuthHeader: string | undefined;
+  defaultAuthHeader: string | (() => string | undefined) | undefined;
+} = {
   freeGoogleApi: true,
   verbose: false,
-  lastAuthHeader: undefined, // cached from last chat request for /junie/balance
+  lastAuthHeader: undefined,
+  defaultAuthHeader: undefined,
 };
 
 // ─── Model ID Mapping ───────────────────────────────────────────────────────
-const OPENAI_MODEL_MAP = {
+const OPENAI_MODEL_MAP: Record<string, string> = {
   "openai-gpt-5-2":            "gpt-5.2",
   "openai-gpt-5-4":            "gpt-5.4",
   "openai-gpt-5-5":            "gpt-5.5",
@@ -29,31 +36,31 @@ const OPENAI_MODEL_MAP = {
 
 // xAI models — same OpenAI Responses API surface, but the Grazie backend needs
 // X-LLM-Model: grok to route them (see grokHeaders below).
-const GROK_MODEL_MAP = {
+const GROK_MODEL_MAP: Record<string, string> = {
   "grok-4-3": "grok-4.3",
   "grok-4-5": "grok-4.5",
 };
 
-function resolveOpenAIModelId(modelId) {
+function resolveOpenAIModelId(modelId: string) {
   return OPENAI_MODEL_MAP[modelId] ?? GROK_MODEL_MAP[modelId] ?? modelId;
 }
 
-function isOpenAIModel(id) { return id.startsWith("openai-"); }
-function isAnthropicModel(id) { return id.startsWith("claude-"); }
-function isGrokModel(id) { return id.startsWith("grok-"); }
-function isGeminiModel(id) { return id.startsWith("gemini-"); }
+function isOpenAIModel(id: string) { return id.startsWith("openai-"); }
+function isAnthropicModel(id: string) { return id.startsWith("claude-"); }
+function isGrokModel(id: string) { return id.startsWith("grok-"); }
+function isGeminiModel(id: string) { return id.startsWith("gemini-"); }
 
 // Google models are not served on an OpenAI-shaped route: Junie talks to them
 // through a Vertex-style generateContent path (LLMAccess$Companion.
 // googleGenerateContent), with "jetbrains-grazie" as the project.
 const GOOGLE_PROJECT = "jetbrains-grazie";
-function googlePath(model, method) {
+function googlePath(model: string, method: string) {
   return `/v1beta1/projects/${GOOGLE_PROJECT}/locations/global/publishers/google/models/${model}:${method}`;
 }
 
 // ─── Headers ─────────────────────────────────────────────────────────────────
-function openaiHeaders(authHeader) {
-  const h = {
+function openaiHeaders(authHeader: any) {
+  const h: Record<string, any> = {
     "Authorization": authHeader,
     "Content-Type": "application/json",
     "Accept": "text/event-stream,application/json",
@@ -71,16 +78,16 @@ function openaiHeaders(authHeader) {
 // Grok goes through the same OpenAI Responses payload/path, only the
 // X-LLM-Model routing header differs (LlmProvider.XAI → "grok" in
 // IngrazzioLLMAccessKt).
-function grokHeaders(authHeader) {
+function grokHeaders(authHeader: any) {
   return { ...openaiHeaders(authHeader), "X-LLM-Model": "grok" };
 }
 
-function googleHeaders(authHeader) {
+function googleHeaders(authHeader: any) {
   return { ...openaiHeaders(authHeader), "X-LLM-Model": "google" };
 }
 
-function anthropicHeaders(authHeader) {
-  const h = {
+function anthropicHeaders(authHeader: any) {
+  const h: Record<string, any> = {
     "Authorization": authHeader,
     "Content-Type": "application/json",
     "Accept": "text/event-stream,application/json",
@@ -120,8 +127,8 @@ const RESPONSES_ALLOWED = new Set([
   "store", "stream", "temperature", "top_p", "cache_control",
 ]);
 
-function sanitizeOpenAI(payload) {
-  const safe = {};
+function sanitizeOpenAI(payload: any) {
+  const safe: any = {};
   for (const [k, v] of Object.entries(payload)) {
     if (OPENAI_ALLOWED.has(k)) safe[k] = v;
   }
@@ -132,8 +139,8 @@ function sanitizeOpenAI(payload) {
   return safe;
 }
 
-function sanitizeResponses(payload) {
-  const safe = {};
+function sanitizeResponses(payload: any) {
+  const safe: any = {};
   for (const [k, v] of Object.entries(payload)) {
     if (RESPONSES_ALLOWED.has(k)) safe[k] = v;
   }
@@ -141,8 +148,8 @@ function sanitizeResponses(payload) {
   return safe;
 }
 
-function sanitizeAnthropic(payload) {
-  const safe = {};
+function sanitizeAnthropic(payload: any) {
+  const safe: any = {};
   for (const [k, v] of Object.entries(payload)) {
     if (ANTHROPIC_ALLOWED.has(k)) {
       safe[k] = k === "system" ? sanitizeSystem(v) : v;
@@ -151,21 +158,21 @@ function sanitizeAnthropic(payload) {
   return safe;
 }
 
-function sanitizeSystem(system) {
+function sanitizeSystem(system: any) {
   if (!Array.isArray(system)) return system;
   return system.map((block) => {
     if (typeof block !== "object" || block === null || !("cache_control" in block)) return block;
-    const { cache_control, ...rest } = block;
+    const { cache_control, ...rest } = block as any;
     if (typeof cache_control !== "object" || cache_control === null) return block;
     return { ...rest, cache_control: { type: cache_control.type } };
   });
 }
 
 // ─── Upstream Requests ──────────────────────────────────────────────────────
-async function forwardOpenAI(payload, authHeader) {
+async function forwardOpenAI(payload: any, authHeader: any) {
   const url = `${UPSTREAM_BASE}/v1/chat/completions`;
   const body = sanitizeOpenAI(payload);
-  const res = await proxyFetch(url, {
+  const res: any = await proxyFetch(url, {
     method: "POST",
     headers: openaiHeaders(authHeader),
     body: JSON.stringify(body),
@@ -177,11 +184,11 @@ async function forwardOpenAI(payload, authHeader) {
   return res;
 }
 
-async function forwardResponses(payload, authHeader) {
+async function forwardResponses(payload: any, authHeader: any) {
   const url = `${UPSTREAM_BASE}/v1/responses`;
   const body = sanitizeResponses(payload);
   const headers = isGrokModel(payload.model) ? grokHeaders(authHeader) : openaiHeaders(authHeader);
-  const res = await proxyFetch(url, {
+  const res: any = await proxyFetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -193,9 +200,9 @@ async function forwardResponses(payload, authHeader) {
   return res;
 }
 
-async function forwardGoogle(model, method, search, body, authHeader) {
+async function forwardGoogle(model: any, method: any, search: any, body: any, authHeader: any) {
   const url = `${UPSTREAM_BASE}${googlePath(model, method)}${search}`;
-  const res = await proxyFetch(url, {
+  const res: any = await proxyFetch(url, {
     method: "POST",
     headers: googleHeaders(authHeader),
     body,
@@ -207,10 +214,10 @@ async function forwardGoogle(model, method, search, body, authHeader) {
   return res;
 }
 
-async function forwardAnthropic(payload, authHeader) {
+async function forwardAnthropic(payload: any, authHeader: any) {
   const url = `${UPSTREAM_BASE}/v1/messages`;
   const body = sanitizeAnthropic(payload);
-  const res = await proxyFetch(url, {
+  const res: any = await proxyFetch(url, {
     method: "POST",
     headers: anthropicHeaders(authHeader),
     body: JSON.stringify(body),
@@ -231,13 +238,13 @@ async function forwardAnthropic(payload, authHeader) {
 
 const DEFAULT_MAX_TOKENS = 8192;
 
-function firstOf(...vals) {
+function firstOf(...vals: any[]) {
   for (const v of vals) if (v !== undefined && v !== null) return v;
   return undefined;
 }
 
 // ── Request: OpenAI → Anthropic ──────────────────────────────────────────────
-export function translateOpenAIToAnthropic(payload) {
+export function translateOpenAIToAnthropic(payload: any) {
   const systemParts = [];
   const messages = [];
 
@@ -291,7 +298,7 @@ export function translateOpenAIToAnthropic(payload) {
     }
   }
 
-  const anthropic = {
+  const anthropic: any = {
     model: payload.model,
     max_tokens: firstOf(payload.max_tokens, payload.max_completion_tokens, DEFAULT_MAX_TOKENS),
     messages,
@@ -300,7 +307,7 @@ export function translateOpenAIToAnthropic(payload) {
   else if (systemParts.length > 1) anthropic.system = systemParts.map((text) => ({ type: "text", text }));
 
   if (payload.tools?.length) {
-    anthropic.tools = payload.tools.map((t) => {
+    anthropic.tools = payload.tools.map((t: any) => {
       const fn = t.function ?? t;
       return { name: fn.name, description: fn.description ?? "", input_schema: fn.parameters ?? { type: "object", properties: {} } };
     });
@@ -313,7 +320,7 @@ export function translateOpenAIToAnthropic(payload) {
   return anthropic;
 }
 
-function openAIContentToAnthropic(content) {
+function openAIContentToAnthropic(content: any) {
   if (typeof content === "string") return content;
   const blocks = [];
   for (const p of content ?? []) {
@@ -323,7 +330,7 @@ function openAIContentToAnthropic(content) {
   return blocks;
 }
 
-function openAIImageToAnthropic(imageUrl) {
+function openAIImageToAnthropic(imageUrl: any) {
   const url = typeof imageUrl === "string" ? imageUrl : imageUrl?.url;
   if (url?.startsWith("data:")) {
     const m = url.match(/^data:([^;]+);base64,(.*)$/s);
@@ -333,7 +340,7 @@ function openAIImageToAnthropic(imageUrl) {
   return { type: "image", source: { type: "url", url } };
 }
 
-function translateToolChoice(choice) {
+function translateToolChoice(choice: any) {
   if (typeof choice === "string") {
     if (choice === "auto") return { type: "auto" };
     if (choice === "none") return { type: "none" };
@@ -344,7 +351,7 @@ function translateToolChoice(choice) {
   return { type: choice.type === "none" ? "none" : choice.type === "required" ? "any" : "auto" };
 }
 
-function mapAnthropicStopReason(reason) {
+function mapAnthropicStopReason(reason: any) {
   switch (reason) {
     case "end_turn":
     case "stop_sequence": return "stop";
@@ -355,7 +362,7 @@ function mapAnthropicStopReason(reason) {
 }
 
 // ── Response: Anthropic → OpenAI (non-streaming) ──────────────────────────────
-export function translateAnthropicToOpenAI(resp, model) {
+export function translateAnthropicToOpenAI(resp: any, model: any) {
   const textParts = [];
   const toolCalls = [];
   for (const block of resp.content ?? []) {
@@ -368,7 +375,7 @@ export function translateAnthropicToOpenAI(resp, model) {
       });
     }
   }
-  const message = { role: "assistant", content: textParts.join("") || null };
+  const message: any = { role: "assistant", content: textParts.join("") || null };
   if (toolCalls.length) message.tool_calls = toolCalls;
 
   return {

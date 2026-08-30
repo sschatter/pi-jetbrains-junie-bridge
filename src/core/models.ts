@@ -61,9 +61,9 @@ export const MODEL_CLASSIFICATIONS = Object.freeze({
   UNKNOWN: "unknown",
 });
 
-export function classifyModel(id) {
-  if (UNSUPPORTED_GRAZIE_MODELS[id]) {
-    return { id, status: MODEL_CLASSIFICATIONS.BLACKLISTED, reason: UNSUPPORTED_GRAZIE_MODELS[id] };
+export function classifyModel(id: string) {
+  if ((UNSUPPORTED_GRAZIE_MODELS as Record<string, string>)[id]) {
+    return { id, status: MODEL_CLASSIFICATIONS.BLACKLISTED, reason: (UNSUPPORTED_GRAZIE_MODELS as Record<string, string>)[id] };
   }
   if (KNOWN_GRAZIE_MODELS.includes(id) && !isLegacyModel(id)) {
     return { id, status: MODEL_CLASSIFICATIONS.SUPPORTED };
@@ -71,16 +71,16 @@ export function classifyModel(id) {
   return { id, status: MODEL_CLASSIFICATIONS.UNKNOWN };
 }
 
-export function classifyBackendModels(ids) {
-  const result = { supported: [], blacklisted: [], unknown: [] };
+export function classifyBackendModels(ids: string[]) {
+  const result: { supported: any[]; blacklisted: any[]; unknown: any[] } = { supported: [], blacklisted: [], unknown: [] };
   for (const id of ids) {
     const classification = classifyModel(id);
-    result[classification.status].push(classification);
+    (result as any)[classification.status].push(classification);
   }
   return result;
 }
 
-const MODEL_METADATA = {
+const MODEL_METADATA: Record<string, { reasoning: boolean; contextWindow: number; maxTokens: number }> = {
   "claude-sonnet-4-6":          { reasoning: true,  contextWindow: 1000000, maxTokens: 128000 },
   "claude-sonnet-5":            { reasoning: true,  contextWindow: 1000000, maxTokens: 128000 },
   "claude-opus-4-6":            { reasoning: true,  contextWindow: 1000000, maxTokens: 128000 },
@@ -103,14 +103,14 @@ const MODEL_METADATA = {
   "gemini-3.6-flash":           { reasoning: true,  contextWindow: 1048576, maxTokens: 65536 },
 };
 
-const PREFIX_DEFAULTS = {
+const PREFIX_DEFAULTS: Record<string, { reasoning: boolean; contextWindow: number; maxTokens: number }> = {
   "openai-":   { reasoning: true,  contextWindow: 1000000, maxTokens: 32768 },
   "claude-":   { reasoning: true,  contextWindow: 1000000, maxTokens: 128000 },
   "grok-":     { reasoning: true,  contextWindow: 500000,  maxTokens: 32768 },
   "gemini-":   { reasoning: true,  contextWindow: 1048576, maxTokens: 65536 },
 };
 
-function getModelMeta(id) {
+function getModelMeta(id: string) {
   if (MODEL_METADATA[id]) return MODEL_METADATA[id];
   for (const [prefix, defaults] of Object.entries(PREFIX_DEFAULTS)) {
     if (id.startsWith(prefix)) return defaults;
@@ -118,7 +118,7 @@ function getModelMeta(id) {
   return { reasoning: false, contextWindow: 128000, maxTokens: 16384 };
 }
 
-export function isLegacyModel(id) {
+export function isLegacyModel(id: string) {
   if (/^openai-gpt-?5(-mini|-nano|-codex)?$/.test(id)) return true;
   if (/^openai-gpt-?4/.test(id)) return true;
   if (/^openai-o[1234]/.test(id)) return true;
@@ -162,7 +162,7 @@ const CLAUDE_COMPAT = {
   supportsLongCacheRetention: false,
 };
 
-const PREFIX_BY_TYPE = {
+const PREFIX_BY_TYPE: Record<string, string> = {
   claude: "claude-",
   grok:   "grok-",
   gemini: "gemini-",
@@ -178,7 +178,7 @@ const PREFIX_BY_TYPE = {
  * @param {"openai" | "claude" | "grok" | "gemini"} type
  * @param {number} [port] — required for claude/gemini (per-model baseUrl override)
  */
-export function buildProviderModels(type, port) {
+export function buildProviderModels(type: string, port?: number) {
   const prefix = PREFIX_BY_TYPE[type];
   // Gemini goes through pi-ai's Google client, which ignores the OpenAI/Claude
   // compat flags — leave them off rather than sending misleading ones.
@@ -188,7 +188,7 @@ export function buildProviderModels(type, port) {
     .filter((id) => id.startsWith(prefix) && classifyModel(id).status === MODEL_CLASSIFICATIONS.SUPPORTED)
     .map((id) => {
       const meta = getModelMeta(id);
-      const model = {
+      const model: any = {
         id,
         name: id + " (Junie)",
         reasoning: meta.reasoning,

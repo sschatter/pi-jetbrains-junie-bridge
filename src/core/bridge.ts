@@ -4,7 +4,7 @@
 import { startServer } from "./server.ts";
 
 /** Start one isolated local bridge for a host adapter. */
-export async function startJunieBridge(options?) {
+export async function startJunieBridge(options?: any) {
   const { server, port } = await startServer(options);
   const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -12,25 +12,25 @@ export async function startJunieBridge(options?) {
     server,
     port,
     baseUrl,
-    close() {
+    close(): Promise<void> {
       return new Promise((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
+        server.close((error?: Error) => (error ? reject(error) : resolve()));
       });
     },
   };
 }
 
-export function authorizationHeaders(accessToken) {
+export function authorizationHeaders(accessToken?: string) {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
 /** Fetch JSON from the local bridge without coupling callers to its port. */
-export async function fetchBridgeJson(bridge, path, { accessToken, ...init } = {}) {
+export async function fetchBridgeJson(bridge: any, path: string, { accessToken, ...init }: any = {}) {
   const response = await fetch(`${bridge.baseUrl}${path}`, {
     ...init,
     headers: {
       ...authorizationHeaders(accessToken),
-      ...init.headers,
+      ...(init.headers || {}),
     },
   });
   const body = await response.json().catch(() => undefined);

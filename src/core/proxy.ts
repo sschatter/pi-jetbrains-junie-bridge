@@ -30,7 +30,7 @@ export function getProxyUrl() {
  * PROXY_AUTH_TOKEN wins, and is assumed to be a bare Basic token unless it
  * already carries a scheme (i.e. contains a space).
  */
-function getProxyAuth(parsedProxyUrl) {
+function getProxyAuth(parsedProxyUrl: URL) {
   const token = process.env.PROXY_AUTH_TOKEN;
   if (token) return token.includes(" ") ? token : `Basic ${token}`;
   if (parsedProxyUrl.username) {
@@ -41,19 +41,19 @@ function getProxyAuth(parsedProxyUrl) {
 }
 
 /** CONNECT through the proxy, resolving with the raw tunnelled socket. */
-function openTunnel(proxyUrl, host, port) {
+function openTunnel(proxyUrl: string, host: string, port: string | number) {
   return new Promise((resolve, reject) => {
     const proxy = new URL(proxyUrl);
     const proxyIsTls = proxy.protocol === "https:";
     const target = `${host}:${port}`;
 
-    const headers = { host: target };
+    const headers: Record<string, string> = { host: target };
     const auth = getProxyAuth(proxy);
     if (auth) headers["Proxy-Authorization"] = auth;
 
     const req = (proxyIsTls ? httpsRequest : httpRequest)({
       host: proxy.hostname,
-      port: proxy.port || (proxyIsTls ? 443 : 80),
+      port: proxy.port ? Number(proxy.port) : (proxyIsTls ? 443 : 80),
       method: "CONNECT",
       path: target,
       headers,
@@ -75,23 +75,24 @@ function openTunnel(proxyUrl, host, port) {
 }
 
 /** Node's header bag (values may be arrays, e.g. set-cookie) → Headers. */
-function toHeaders(nodeHeaders) {
+function toHeaders(nodeHeaders: any) {
   const headers = new Headers();
   for (const [name, value] of Object.entries(nodeHeaders)) {
     if (value === undefined) continue;
-    for (const v of Array.isArray(value) ? value : [value]) headers.append(name, v);
+    for (const v of Array.isArray(value) ? value : [value]) headers.append(name, String(v));
   }
   return headers;
 }
 
 /** Request over an already-established tunnel, resolved as a fetch Response. */
-function requestOverSocket(socket, target, options) {
+function requestOverSocket(socket: any, target: URL, options: any) {
   return new Promise((resolve, reject) => {
     const body = options.body == null ? null
       : typeof options.body === "string" ? options.body
+      : options.body instanceof URLSearchParams ? options.body.toString()
       : String(options.body); // URLSearchParams and friends
 
-    const headers = { ...options.headers };
+    const headers: Record<string, any> = { ...(options.headers || {}) };
     if (body !== null && !Object.keys(headers).some((h) => h.toLowerCase() === "content-length")) {
       headers["Content-Length"] = Buffer.byteLength(body);
     }
@@ -103,7 +104,7 @@ function requestOverSocket(socket, target, options) {
       createConnection: () => tlsConnect({ socket, servername: target.hostname }),
     }, (res) => {
       const status = res.statusCode ?? 502;
-      resolve(new Response(NULL_BODY_STATUS.has(status) ? null : Readable.toWeb(res), {
+      resolve(new Response(NULL_BODY_STATUS.has(status) ? null : (Readable.toWeb(res) as any), {
         status,
         statusText: res.statusMessage,
         headers: toHeaders(res.headers),
@@ -123,7 +124,7 @@ function requestOverSocket(socket, target, options) {
  * costs one extra handshake per request on the proxy path, which is not worth
  * a dependency for the request volume this bridge sees.
  */
-export async function proxyFetch(url, options = {}) {
+export async function proxyFetch(url: string, options: any = {}) {
   const proxyUrl = getProxyUrl();
   if (!proxyUrl) return globalThis.fetch(url, options);
 
@@ -145,7 +146,7 @@ export async function proxyFetch(url, options = {}) {
 
 export function getProxyDiagnostics() {
   const proxyUrl = getProxyUrl();
-  const info = { proxy: null, auth: "none" };
+  const info: { proxy: string | null; auth: string } = { proxy: null, auth: "none" };
   if (!proxyUrl) return info;
 
   try {

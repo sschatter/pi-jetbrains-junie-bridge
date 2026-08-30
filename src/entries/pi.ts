@@ -198,10 +198,10 @@ export default async function (pi: ExtensionAPI) {
     authHeader: true,
     oauth,
     models: [
-      ...buildProviderModels("openai", port),
-      ...buildProviderModels("claude", port),
-      ...buildProviderModels("grok", port),
-      ...buildProviderModels("gemini", port),
+      ...buildProviderModels("openai", Number(port)),
+      ...buildProviderModels("claude", Number(port)),
+      ...buildProviderModels("grok", Number(port)),
+      ...buildProviderModels("gemini", Number(port)),
     ] as any,
   });
 

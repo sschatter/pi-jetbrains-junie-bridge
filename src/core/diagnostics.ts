@@ -5,7 +5,7 @@ import { classifyBackendModels } from "./models.ts";
  * Collect operational data concurrently. Callers decide whether to render it
  * as a Pi overlay, an OpenCode toast, or a machine-readable report.
  */
-export async function collectDiagnostics(bridge, accessToken, { connectivity = false } = {}) {
+export async function collectDiagnostics(bridge: any, accessToken?: string, { connectivity = false }: any = {}) {
   const [balance, models, test] = await Promise.all([
     fetchBridgeJson(bridge, "/junie/balance", { accessToken }),
     fetchBridgeJson(bridge, "/v1/models", { accessToken }),
@@ -16,26 +16,26 @@ export async function collectDiagnostics(bridge, accessToken, { connectivity = f
     balance: balance.body,
     models: models.body,
     connectivity: test?.body,
-    proxy: test?.body?.proxy,
+    proxy: (test?.body as any)?.proxy,
   };
 }
 
 const CREDITS_PER_USD = 100_000;
 const JUNIE_TOP_UP_URL = "https://jb.gg/junie_top_up";
 const JUNIE_ULTIMATE_URL = "https://jb.gg/junie_buy_ultimate";
-const LICENSE_NAMES = {
+const LICENSE_NAMES: Record<string, string> = {
   AIP: "JetBrains AI Pro",
   AIPU: "JetBrains AI Ultimate",
   TRIAL: "JetBrains AI trial",
 };
 
-function formatUsd(value) {
+function formatUsd(value: any) {
   return typeof value === "number" && Number.isFinite(value)
     ? `$${(value / CREDITS_PER_USD).toFixed(2)}`
     : undefined;
 }
 
-function quotaSummary(balance) {
+function quotaSummary(balance: any) {
   const tariff = balance?.quota?.tariff;
   const topUp = balance?.quota?.topUp;
   if (!tariff && !topUp) return undefined;
@@ -47,29 +47,29 @@ function quotaSummary(balance) {
   return monthly || topUpAvailable ? { monthly, topUp: topUpAvailable } : undefined;
 }
 
-export function availableCredits(balance) {
+export function availableCredits(balance: any) {
   const available = balance?.quota?.available;
   return typeof available === "number" && Number.isFinite(available)
     ? available / CREDITS_PER_USD
     : undefined;
 }
 
-function quotaCredits(balance, bucket) {
+function quotaCredits(balance: any, bucket: string) {
   const available = balance?.quota?.[bucket]?.available;
   return typeof available === "number" && Number.isFinite(available)
     ? available / CREDITS_PER_USD
     : undefined;
 }
 
-export function monthlyAvailableCredits(balance) {
+export function monthlyAvailableCredits(balance: any) {
   return quotaCredits(balance, "tariff");
 }
 
-export function topUpAvailableCredits(balance) {
+export function topUpAvailableCredits(balance: any) {
   return quotaCredits(balance, "topUp");
 }
 
-export function formatTurnResult({ durationMs, cost, remaining, topUpRemaining }) {
+export function formatTurnResult({ durationMs, cost, remaining, topUpRemaining }: any) {
   const duration = typeof durationMs === "number" && Number.isFinite(durationMs)
     ? `${Math.max(0, Math.round(durationMs / 1000))}s`
     : "unknown time";
@@ -85,12 +85,12 @@ export function formatTurnResult({ durationMs, cost, remaining, topUpRemaining }
   return `TASK RESULT in ${duration} - cost ${costText} - ${remainingText}${topUpText}`;
 }
 
-function licenseName(licenseType) {
+function licenseName(licenseType: any) {
   if (typeof licenseType !== "string" || licenseType.length === 0) return undefined;
   return LICENSE_NAMES[licenseType] ?? licenseType;
 }
 
-export function formatBalanceToast(balance) {
+export function formatBalanceToast(balance: any) {
   const quota = quotaSummary(balance);
   if (quota) {
     const parts = [];
@@ -103,9 +103,9 @@ export function formatBalanceToast(balance) {
   return `Junie balance: ${balance.balanceLeft} ${unit}`;
 }
 
-export function formatDiagnosticsReport(diagnostics) {
+export function formatDiagnosticsReport(diagnostics: any) {
   const models = Array.isArray(diagnostics.models?.data)
-    ? diagnostics.models.data.map((model) => model.id).filter(Boolean)
+    ? diagnostics.models.data.map((model: any) => model.id).filter(Boolean)
     : [];
   const classified = classifyBackendModels(models);
   const balance = diagnostics.balance;
@@ -130,7 +130,7 @@ export function formatDiagnosticsReport(diagnostics) {
   const connection = diagnostics.connectivity;
   if (connection?.tests) {
     lines.push("", "Connectivity:");
-    for (const [name, result] of Object.entries(connection.tests)) {
+    for (const [name, result] of Object.entries(connection.tests) as [string, any][]) {
       lines.push(`- ${name}: ${result.ok ? "ok" : `failed${result.error ? ` (${result.error})` : ""}`}`);
     }
   } else {
@@ -148,11 +148,11 @@ export function formatDiagnosticsReport(diagnostics) {
   lines.push(`- verified and selectable: ${classified.supported.length}`);
   if (classified.blacklisted.length > 0) {
     lines.push("- blacklisted:");
-    for (const model of classified.blacklisted) lines.push(`  - ${model.id}: ${model.reason}`);
+    for (const model of classified.blacklisted as any[]) lines.push(`  - ${model.id}: ${model.reason}`);
   }
   if (classified.unknown.length > 0) {
     lines.push("- unknown (diagnostic-only):");
-    for (const model of classified.unknown) lines.push(`  - ${model.id}`);
+    for (const model of classified.unknown as any[]) lines.push(`  - ${model.id}`);
   }
 
   return lines.join("\n");

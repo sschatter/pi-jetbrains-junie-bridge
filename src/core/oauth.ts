@@ -24,7 +24,7 @@ function generatePKCE() {
   return { codeVerifier, codeChallenge };
 }
 
-function getJwtExpiresIn(token) {
+function getJwtExpiresIn(token: string) {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return undefined;
@@ -37,15 +37,16 @@ function getJwtExpiresIn(token) {
   } catch { return undefined; }
 }
 
-export function junieCredentialsNeedRefresh(credentials) {
+export function junieCredentialsNeedRefresh(credentials: any) {
   if (!credentials?.refresh) return false;
   if (typeof credentials.expires === "number") return credentials.expires <= Date.now();
   const expiresIn = getJwtExpiresIn(credentials.access);
   return expiresIn !== undefined && expiresIn <= 0;
 }
 
-async function startCallbackServer(signal) {
-  let resolveCallback, rejectCallback;
+async function startCallbackServer(signal?: AbortSignal) {
+  let resolveCallback: (value: any) => void;
+  let rejectCallback: (reason?: any) => void;
   const callbackPromise = new Promise((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
@@ -81,7 +82,7 @@ async function startCallbackServer(signal) {
     }, { once: true });
   }
 
-  const port = await new Promise((resolve, reject) => {
+  const port = await new Promise<number>((resolve, reject) => {
     let current = OAUTH.callbackPortStart;
     const tryPort = () => {
       if (current > OAUTH.callbackPortEnd) {
@@ -97,12 +98,12 @@ async function startCallbackServer(signal) {
   return { server, port, waitForCallback: () => callbackPromise };
 }
 
-function buildAuthUrl(port, codeChallenge, authState) {
+function buildAuthUrl(port: number, codeChallenge: string, authState: string) {
   const redirectUri = `http://localhost:${port}`;
   return `${OAUTH.loginInitialUrl}?client_id=${OAUTH.clientId}&scope=${encodeURIComponent(OAUTH.scopes)}&state=${authState}&code_challenge=${codeChallenge}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 
-async function exchangeCodeForToken(code, codeVerifier, redirectUri) {
+async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -110,7 +111,7 @@ async function exchangeCodeForToken(code, codeVerifier, redirectUri) {
     client_id: OAUTH.clientId,
     redirect_uri: redirectUri,
   });
-  const res = await proxyFetch(OAUTH.tokenEndpoint, {
+  const res: any = await proxyFetch(OAUTH.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -124,7 +125,7 @@ async function exchangeCodeForToken(code, codeVerifier, redirectUri) {
  * @param {import("@earendil-works/pi-ai").OAuthLoginCallbacks} callbacks
  * @returns {Promise<import("@earendil-works/pi-ai").OAuthCredentials>}
  */
-export async function junieLogin(callbacks) {
+export async function junieLogin(callbacks: any) {
   const pkce = generatePKCE();
   const authState = randomBytes(16).toString("hex");
   const { server, port, waitForCallback } = await startCallbackServer(callbacks.signal);
@@ -135,10 +136,10 @@ export async function junieLogin(callbacks) {
   callbacks.onAuth({ url: authUrl });
 
   try {
-    const callback = await waitForCallback();
+    const callback: any = await waitForCallback();
     if (callback.state !== authState) throw new Error("OAuth state mismatch");
 
-    const tokenResponse = await exchangeCodeForToken(callback.code, pkce.codeVerifier, redirectUri);
+    const tokenResponse: any = await exchangeCodeForToken(callback.code, pkce.codeVerifier, redirectUri);
 
     let expiresIn = tokenResponse.expires_in;
     if (!expiresIn && tokenResponse.access_token) {
@@ -163,13 +164,13 @@ export async function junieLogin(callbacks) {
  * @param {import("@earendil-works/pi-ai").OAuthCredentials} credentials
  * @returns {Promise<import("@earendil-works/pi-ai").OAuthCredentials>}
  */
-export async function junieRefreshToken(credentials) {
+export async function junieRefreshToken(credentials: any) {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: credentials.refresh,
     client_id: OAUTH.clientId,
   });
-  const res = await proxyFetch(OAUTH.tokenEndpoint, {
+  const res: any = await proxyFetch(OAUTH.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -184,7 +185,7 @@ export async function junieRefreshToken(credentials) {
     return credentials;
   }
 
-  const data = await res.json();
+  const data: any = await res.json();
 
   let expiresIn = data.expires_in;
   if (!expiresIn && data.access_token) {
