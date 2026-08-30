@@ -7,7 +7,7 @@ OpenCode routes every model in a provider through that provider's configured npm
 To provide high fidelity and fully support vendor-specific features (such as Claude extended thinking, custom prompt formatting, and native tool-calling schemas), the plugin registers three sibling providers on equal footing:
 - **`junie-openai`** (`@ai-sdk/openai`, `/v1`)
 - **`junie-google`** (`@ai-sdk/google`, `/google/v1beta`)
-- **`junie-anthropic`** (`@ai-sdk/anthropic`, bridge root)
+- **`junie-anthropic`** (`@ai-sdk/anthropic`, `/v1`)
 
 ## Standalone Universal Bridge Server (`junie-bridge`)
 
