@@ -26,6 +26,9 @@
     "url": "https://github.com/sschatter/pi-jetbrains-junie-bridge/issues"
   },
   "homepage": "https://github.com/sschatter/pi-jetbrains-junie-bridge#readme",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
   "engines": {
     "node": ">=20"
   },
