@@ -6,13 +6,13 @@ import type {
   ThemeColor,
 } from "@earendil-works/pi-coding-agent";
 import { createRequire } from "node:module";
-import { startServer } from "./lib/server.mjs";
-import { junieLogin, junieRefreshToken } from "./lib/oauth.mjs";
-import { buildProviderModels, cleanOldModelsJson } from "./lib/models.mjs";
-import { getProxyDiagnostics } from "./lib/proxy.mjs";
+import { startServer } from "../core/server.ts";
+import { junieLogin, junieRefreshToken } from "../core/oauth.ts";
+import { buildProviderModels, cleanOldModelsJson } from "../core/models.ts";
+import { getProxyDiagnostics } from "../core/proxy.ts";
 
 const require = createRequire(import.meta.url);
-const { version: PLUGIN_VERSION } = require("./package.json");
+const { version: PLUGIN_VERSION } = require("../../package.json");
 
 /** A run of text with one style — styling is applied after wrapping, so that
  *  the ANSI escapes never confuse the width arithmetic. */
@@ -182,11 +182,32 @@ export default async function (pi: ExtensionAPI) {
   // Start proxy on ephemeral port (OS assigns a free port)
   const { server, port } = await startServer();
 
-  const oauth = {
+  type OAuthCallbacks = Parameters<NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]>["login"]>[0];
+  type OAuthCreds = Awaited<ReturnType<NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]>["login"]>>;
+
+  function toOAuthCreds(file: import("../core/credentials.ts").JunieCredentialFile): OAuthCreds {
+    if (!file.refresh || file.expires === undefined) throw new Error("Junie login missing refresh/expires");
+    return { access: file.access, refresh: file.refresh, expires: file.expires };
+  }
+
+  const oauth: NonNullable<import("@earendil-works/pi-coding-agent").ProviderConfig["oauth"]> = {
     name: "JetBrains Junie",
-    login: junieLogin,
-    refreshToken: junieRefreshToken,
-    getApiKey: (cred: { access: string }) => cred.access,
+    async login(callbacks: OAuthCallbacks): Promise<OAuthCreds> {
+      const file = await junieLogin({
+        signal: callbacks.signal,
+        onAuth: ({ url }: { url: string }) => callbacks.onAuth({ url }),
+      });
+      return toOAuthCreds(file);
+    },
+    async refreshToken(credentials: OAuthCreds, _signal: AbortSignal): Promise<OAuthCreds> {
+      const file = await junieRefreshToken({
+        access: credentials.access,
+        refresh: credentials.refresh,
+        expires: credentials.expires,
+      });
+      return toOAuthCreds(file);
+    },
+    getApiKey: (cred: OAuthCreds) => cred.access,
   };
 
   // Single provider — OpenAI models inherit provider-level api/baseUrl,
@@ -198,10 +219,10 @@ export default async function (pi: ExtensionAPI) {
     authHeader: true,
     oauth,
     models: [
-      ...buildProviderModels("openai", port),
-      ...buildProviderModels("claude", port),
-      ...buildProviderModels("grok", port),
-      ...buildProviderModels("gemini", port),
+      ...buildProviderModels("openai", Number(port)),
+      ...buildProviderModels("claude", Number(port)),
+      ...buildProviderModels("grok", Number(port)),
+      ...buildProviderModels("gemini", Number(port)),
     ],
   });
 
@@ -462,7 +483,7 @@ export default async function (pi: ExtensionAPI) {
       if (testInfo) {
         lines.push("");
         lines.push("**Connectivity:**");
-        for (const [name, t] of Object.entries(testInfo.tests) as [string, any][]) {
+        for (const [name, t] of Object.entries(testInfo.tests) as Array<[string, { ok: boolean; error?: string; status?: number }]>) {
           const icon = t.ok ? "+" : "!";
           lines.push(`- [${icon}] ${name}: ${t.ok ? `ok${t.status ? ` (${t.status})` : ""}` : t.error}`);
         }

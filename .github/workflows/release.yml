@@ -14,16 +14,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
       - name: Publish to npm
-        run: npm publish --provenance
+        run: npm publish --provenance --ignore-scripts
 
       - name: Create GitHub Release
-        run: gh release create "${{ github.ref_name }}" --generate-notes
+        run: gh release create "$RELEASE_TAG" --generate-notes
         env:
+          RELEASE_TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ github.token }}
