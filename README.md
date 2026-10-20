@@ -1,11 +1,11 @@
-# pi-jetbrains-junie-bridge
+# @darodrig/pi-jetbrains-junie-bridge
 
 A [Pi](https://pi.dev/) extension that lets you use [JetBrains Junie](https://junie.jetbrains.com/) as the AI backend for the Pi coding agent — using your existing Junie subscription.
 
 ## Install
 
 ```bash
-pi install npm:pi-jetbrains-junie-bridge
+pi install npm:@darodrig/pi-jetbrains-junie-bridge
 ```
 
 Then inside `pi` run the `/login` command.  Select `Use a subscription` and then `JetBrains Junie` to authenticate.
@@ -30,6 +30,7 @@ Once authenticated, run `/model` to select a model provided by the junie bridge.
 Anthropic (Claude), OpenAI, xAI (Grok) and Google (Gemini) models are supported. The reasoning effort is adjustable in Pi.
 
 The list below is mostly in sync with the models Junie itself offers, as published at <https://llm24.net/llm/junie.txt>.
+It is extracted from the Junie CLI release **26.10.12 (build 3659.7)** — see `JUNIE_INSIGHTS.md` for the procedure.
 
 **Anthropic:**
 - `claude-sonnet-4-6`
@@ -38,6 +39,9 @@ The list below is mostly in sync with the models Junie itself offers, as publish
 - `claude-opus-4-7`
 - `claude-opus-4-8`
 - `claude-opus-5`
+- `claude-opus-5-5`
+- `claude-sonnet-5-5`
+- `claude-haiku-5-5`
 - `claude-fable-5`
 - `claude-fable-5-1`
 
@@ -49,11 +53,15 @@ The list below is mostly in sync with the models Junie itself offers, as publish
 - `openai-gpt-5-6-terra`
 - `openai-gpt-5-6-sol`
 - `openai-gpt-6-astra`
+- `openai-gpt-6-luna`
+- `openai-gpt-6-sol`
+- `openai-gpt-6-1-sol`
 
 **xAI:**
 - `grok-4-3`
 - `grok-4-5`
 - `grok-4-6`
+- `grok-4-7`
 
 **Google:**
 - `gemini-3-flash-preview`
@@ -64,9 +72,10 @@ The list below is mostly in sync with the models Junie itself offers, as publish
 - `gemini-3.6-flash`
 - `gemini-3.7-flash`
 - `gemini-3.8-flash`
+- `gemini-4-argon`
 
 Missing models:
-- **`deepseek-v4-flash`** — not implemented yet. JetBrains routes DeepSeek through a different backend (AliCloud), and every path/header combination tried so far is rejected by the Grazie gateway for subscription OAuth tokens.
+- **`deepseek-v4.1-flash`** — not implemented yet. JetBrains routes DeepSeek through a different backend (AliCloud), and every path/header combination tried so far is rejected by the Grazie gateway for subscription OAuth tokens.
 - **`kimi-k2.5`, `muse-spark-1.x`** — listed on llm24.net but gated to internal/EAP licences; every route tried answers 400/404.
 - **`gemini-3-pro-preview`** — in the Junie JAR, but the Google publisher 404s it (not live).
 - **Older OpenAI generations** (`gpt-5-2025-08-07`, `gpt-5.3-codex`) — reachable, but deliberately left out in favour of the current GPT-5 models.

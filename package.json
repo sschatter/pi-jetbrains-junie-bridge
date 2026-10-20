@@ -1,5 +1,5 @@
 {
-  "name": "pi-jetbrains-junie-bridge",
+  "name": "@darodrig/pi-jetbrains-junie-bridge",
   "version": "1.4.0",
   "description": "Pi extension that connects Pi coding agent with JetBrains Junie as the AI backend",
   "type": "module",
@@ -16,16 +16,19 @@
     "coding-agent",
     "ai"
   ],
-  "author": "Sven Schatter",
+  "author": "d-r-e",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sschatter/pi-jetbrains-junie-bridge.git"
+    "url": "git+https://github.com/d-r-e/pi-jetbrains-junie-bridge.git"
   },
   "bugs": {
-    "url": "https://github.com/sschatter/pi-jetbrains-junie-bridge/issues"
+    "url": "https://github.com/d-r-e/pi-jetbrains-junie-bridge/issues"
   },
-  "homepage": "https://github.com/sschatter/pi-jetbrains-junie-bridge#readme",
+  "homepage": "https://github.com/d-r-e/pi-jetbrains-junie-bridge#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },

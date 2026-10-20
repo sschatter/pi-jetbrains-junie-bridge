@@ -321,6 +321,23 @@ for m, vals in sorted(models.items()):
 
 The integer values represent `[maxOutputTokens, maxContextTokens]`. When only one value appears, `maxOutputTokens` is null (uses provider default) and the single value is `maxContextTokens`.
 
+### Current capabilities (v3659.7)
+
+Added with the v3659.7 extraction (2026-10-16). `maxOutput` is `null` where the
+JAR leaves it unset — the bridge then falls back to the provider default
+(32,768 for OpenAI/Grok, 65,536 for Gemini).
+
+| Model | maxOutput | maxContext | Notes |
+|-------|-----------|------------|-------|
+| `openai-gpt-6-1-sol` | null | 1,000,000 | upstream id `gpt-6.1-sol` |
+| `openai-gpt-6-sol` | null | 1,000,000 | |
+| `openai-gpt-6-luna` | null | 1,000,000 | |
+| `claude-opus-5-5` | 128,000 | 1,000,000 | |
+| `claude-sonnet-5-5` | 128,000 | 1,000,000 | |
+| `claude-haiku-5-5` | 64,000 | 1,000,000 | smaller output, like `claude-haiku-4-5` |
+| `grok-4-7` | null | 500,000 | |
+| `gemini-4-argon` | null | 1,048,576 | |
+
 ### Current capabilities (v3013.7)
 
 | Model | maxOutput | maxContext | Notes |
@@ -455,6 +472,7 @@ When updating to a new Junie CLI version:
 
 | Bridge update | Junie CLI version | Changes |
 |--------------|-------------------|---------|
+| 2026-10-16 | v3659.7 (release 26.10.12) | Added `openai-gpt-6-1-sol` (upstream `gpt-6.1-sol`), `openai-gpt-6-sol`, `openai-gpt-6-luna`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `grok-4-7`, `gemini-4-argon` (all verified live). Model IDs and capabilities extracted from the JAR (`LLM.class` + `ModelCapabilities`); `deepseek-v4.1-flash` and `muse-spark-1.x` are in the JAR but still unreachable (AliCloud route rejected / EAP-gated). Updated `Grazie-Agent` version to 3659.7. |
 | 2026-09-17 | v3013.7 (release) | Added `claude-fable-5-1`, `openai-gpt-6-astra`, `grok-4-6`, `gemini-3.5-flash`, `gemini-3.7-flash`, `gemini-3.8-flash` (all verified live). `gemini-3-pro-preview` is in the JAR but the Google publisher 404s it — not added. Noted that unknown Gemini IDs answer Grazie `400 Unsupported model type` while catalogued-but-dead ones answer a publisher `404`, which makes the two states distinguishable. Updated `Grazie-Agent` version to 3013.7. |
 | 2026-07-28 | v2530.1 (nightly) | Added xAI (`grok-4-3`, `grok-4-5`) and Google (5 Gemini 3 models). Both were reachable all along with a plain subscription token — the blocker was routing, not auth: Grok needs `X-LLM-Model: grok` on `/v1/responses` (never `/v1/chat/completions`), Google needs the Vertex-style `generateContent` path. See *Provider Routing*. `deepseek-v4-flash` remains unreachable (AliCloud route returns empty 404s). |
 | 2026-07-27 | v2144.7 | Added `claude-opus-5`. It is served by the Grazie backend before it shows up in the IntelliJ/Junie model picker (same as the gpt-5.6 models were). Found via llm24.net, verified live (see *Probing Models Without the JAR*). |
