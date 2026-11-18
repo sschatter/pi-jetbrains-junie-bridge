@@ -1,0 +1,65 @@
+@base=https://ingrazzio-cloud-prod.labs.jb.gg
+
+### Get AI Quota
+
+GET {{base}}/auth/test
+Authorization: Bearer {{$auth.token("jetbrains")}}
+
+### Get JB User Info
+
+GET https://oauth.account.jetbrains.com/userinfo
+Authorization: Bearer {{$auth.token("jetbrains")}}
+
+### Prompt JB Lite
+
+POST {{base}}/llm/vllm/v1/chat/completions
+Authorization: Bearer {{$auth.token("jetbrains")}}
+X-LLM-Model: jbai
+#X-Forced-License-Free: true
+X-Accept-EAP-License: false
+Grazie-Agent: {"name":"junie:cli","version":"4020.10"}
+Content-Type: application/json
+
+{
+  "model": "Qwen/Qwen3.6-27B-FP8",
+  "messages": [
+    {"role": "system", "content": "You are a coding assistant."},
+    {"role": "user", "content": "Create a file called hello.py with a main function that prints hello. Reply with the file content."}
+  ],
+  "tools": [{
+    "type": "function",
+    "function": {
+      "name": "write_file",
+      "description": "Write content to a file",
+      "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}
+    }
+  }],
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  },
+  "max_tokens": 2000
+}
+
+### Prompt OpenAI
+
+POST {{base}}/v1/responses
+Authorization: Bearer {{$auth.token("jetbrains")}}
+X-LLM-Model: openai
+X-Keep-Path: true
+X-Accept-EAP-License: false
+Grazie-Agent: {"name":"junie:cli","version":"4020.10"}
+Content-Type: application/json
+
+{
+  "model": "gpt-5.5",
+  "input": [
+    {
+      "role": "user",
+      "content": "hi"
+    }
+  ],
+  "max_output_tokens": 16
+}
+
+###

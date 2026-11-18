@@ -27,50 +27,48 @@ Once authenticated, run `/model` to select a model provided by the junie bridge.
 
 ## Available Models
 
-Anthropic (Claude), OpenAI, xAI (Grok) and Google (Gemini) models are supported. The reasoning effort is adjustable in Pi.
+Anthropic (Claude), OpenAI, xAI (Grok), Google (Gemini) models and the free **Junie Lite** tier are supported. The reasoning effort is adjustable in Pi (not for Junie Lite — it does its own thinking).
 
 The list below is mostly in sync with the models Junie itself offers, as published at <https://llm24.net/llm/junie.txt>.
 
 **Anthropic:**
-- `claude-sonnet-4-6`
 - `claude-sonnet-5`
-- `claude-opus-4-6`
-- `claude-opus-4-7`
-- `claude-opus-4-8`
+- `claude-sonnet-5-5`
+- `claude-haiku-5-5`
 - `claude-opus-5`
-- `claude-fable-5`
+- `claude-opus-5-5`
 - `claude-fable-5-1`
+- `claude-fable-5-2`
 
 **OpenAI:**
-- `openai-gpt-5-2`
-- `openai-gpt-5-4`
-- `openai-gpt-5-5`
 - `openai-gpt-5-6-luna`
 - `openai-gpt-5-6-terra`
 - `openai-gpt-5-6-sol`
 - `openai-gpt-6-astra`
+- `openai-gpt-6-luna`
+- `openai-gpt-6-sol`
+- `openai-gpt-6-1-sol`
+- `openai-gpt-6-1-terra`
 
 **xAI:**
-- `grok-4-3`
-- `grok-4-5`
 - `grok-4-6`
+- `grok-4-7`
 
 **Google:**
-- `gemini-3-flash-preview`
-- `gemini-3.1-pro-preview`
-- `gemini-3.1-flash-lite`
-- `gemini-3.5-flash`
-- `gemini-3.5-flash-lite`
 - `gemini-3.6-flash`
 - `gemini-3.7-flash`
 - `gemini-3.8-flash`
+- `gemini-4-argon`
+- `gemini-4-carbon`
+- `gemini-4-hydrogen`
+
+**JetBrains (free):**
+- `junie-lite` — the free Junie tier included with every JetBrains account (currently Qwen 3.6 27B on JetBrains' own infrastructure). Text and image input; no credit consumption.
 
 Missing models:
 - **`deepseek-v4-flash`** — not implemented yet. JetBrains routes DeepSeek through a different backend (AliCloud), and every path/header combination tried so far is rejected by the Grazie gateway for subscription OAuth tokens.
 - **`kimi-k2.5`, `muse-spark-1.x`** — listed on llm24.net but gated to internal/EAP licences; every route tried answers 400/404.
-- **`gemini-3-pro-preview`** — in the Junie JAR, but the Google publisher 404s it (not live).
-- **Older OpenAI generations** (`gpt-5-2025-08-07`, `gpt-5.3-codex`) — reachable, but deliberately left out in favour of the current GPT-5 models.
-- **`gpt`, `grok`, `gemini-pro`, `gemini-flash`** — stale aliases in that list; the backend answers `Model not found` for them.
+- older versions of models, such as `claude-sonnet-4.6` deliberately left out. If you need them, pin an older version of the bridge.
 
 ## Proxy Support
 
