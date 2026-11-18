@@ -202,6 +202,7 @@ export default async function (pi: ExtensionAPI) {
       ...buildProviderModels("claude", port),
       ...buildProviderModels("grok", port),
       ...buildProviderModels("gemini", port),
+      ...buildProviderModels("lite", port),
     ],
   });
 

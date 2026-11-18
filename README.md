@@ -27,7 +27,7 @@ Once authenticated, run `/model` to select a model provided by the junie bridge.
 
 ## Available Models
 
-Anthropic (Claude), OpenAI, xAI (Grok) and Google (Gemini) models are supported. The reasoning effort is adjustable in Pi.
+Anthropic (Claude), OpenAI, xAI (Grok), Google (Gemini) models and the free **Junie Lite** tier are supported. The reasoning effort is adjustable in Pi (not for Junie Lite — it does its own thinking).
 
 The list below is mostly in sync with the models Junie itself offers, as published at <https://llm24.net/llm/junie.txt>.
 
@@ -64,6 +64,9 @@ The list below is mostly in sync with the models Junie itself offers, as publish
 - `gemini-3.6-flash`
 - `gemini-3.7-flash`
 - `gemini-3.8-flash`
+
+**JetBrains (free):**
+- `junie-lite` — the free Junie tier included with every JetBrains account (currently Qwen 3.6 27B on JetBrains' own infrastructure). Text and image input; no credit consumption.
 
 Missing models:
 - **`deepseek-v4-flash`** — not implemented yet. JetBrains routes DeepSeek through a different backend (AliCloud), and every path/header combination tried so far is rejected by the Grazie gateway for subscription OAuth tokens.

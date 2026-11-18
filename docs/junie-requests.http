@@ -1,0 +1,96 @@
+@base=https://ingrazzio-cloud-prod.labs.jb.gg
+
+### Get AI Quota
+
+GET {{base}}/auth/test
+Authorization: Bearer {{$auth.token("jetbrains")}}
+
+<> 2026-11-16T161435.200.json
+<> 2026-11-16T133641.401.json
+<> 2026-11-16T110218.200.json
+<> 2026-11-16T104851.200.json
+<> 2026-11-16T104220.200.json
+<> 2026-11-16T104127.200.json
+<> 2026-11-16T103222.200.json
+<> 2026-11-16T091833.200.json
+<> 2026-11-16T091733.200.json
+<> 2026-08-13T190754.200.json
+<> 2026-08-13T190712.407.json
+<> 2026-08-13T021111.200.json
+<> 2026-08-13T021109.200.json
+<> 2026-08-13T020508.200.json
+<> 2026-08-13T020505.200.json
+<> 2026-08-13T015041.200.json
+<> 2026-08-13T014949.200.json
+<> 2026-08-13T014924.407.json
+<> 2026-08-13T013949.200.json
+<> 2026-08-13T013907.401.json
+
+### Get JB User Info
+
+GET https://oauth.account.jetbrains.com/userinfo
+Authorization: Bearer {{$auth.token("jetbrains")}}
+
+<> 2026-11-16T091721.200.json
+<> 2026-11-16T091622.401.json
+<> 2026-11-16T091535.401.json
+<> 2026-08-13T021100.200.json
+<> 2026-08-13T021018.200.json
+<> 2026-08-13T020956.200.html
+
+### Prompt JB Lite
+
+POST {{base}}/llm/vllm/v1/chat/completions
+Authorization: Bearer {{$auth.token("jetbrains")}}
+X-LLM-Model: jbai
+#X-Forced-License-Free: true
+X-Accept-EAP-License: false
+Grazie-Agent: {"name":"junie:cli","version":"4020.10"}
+Content-Type: application/json
+
+{
+  "model": "Qwen/Qwen3.6-27B-FP8",
+  "messages": [
+    {"role": "system", "content": "You are a coding assistant."},
+    {"role": "user", "content": "Create a file called hello.py with a main function that prints hello. Reply with the file content."}
+  ],
+  "tools": [{
+    "type": "function",
+    "function": {
+      "name": "write_file",
+      "description": "Write content to a file",
+      "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}
+    }
+  }],
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  },
+  "max_tokens": 2000
+}
+
+<> 2026-11-16T182635.401.json
+<> 2026-11-16T182606.401.json
+
+### Prompt OpenAI
+
+POST {{base}}/v1/responses
+Authorization: Bearer {{$auth.token("jetbrains")}}
+X-LLM-Model: openai
+X-Keep-Path: true
+X-Accept-EAP-License: false
+Grazie-Agent: {"name":"junie:cli","version":"4020.10"}
+Content-Type: application/json
+
+{
+  "model": "gpt-5.5",
+  "input": [
+    {
+      "role": "user",
+      "content": "hi"
+    }
+  ],
+  "max_output_tokens": 16
+}
+
+###

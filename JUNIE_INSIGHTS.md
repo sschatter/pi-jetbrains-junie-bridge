@@ -98,6 +98,7 @@ ID was wrong — a useful way to tell the two failure modes apart).
 | OpenAI | `openai` | `/v1/responses` (or `/v1/chat/completions`) | yes |
 | XAI | `grok` | `/v1/responses` **only** | yes |
 | Google | `google` | `/v1beta1/projects/jetbrains-grazie/locations/global/publishers/google/models/<model>:generateContent` | yes |
+| AiPlatformVllm | `jbai` | `/llm/vllm/v1/chat/completions` | yes |
 | LiteLLM | `internal-lite-llm` | — | no (empty 404) |
 | AliCloud | `alicloud` | `/compatible-mode/v1/chat/completions` | no (empty 404) |
 
@@ -124,6 +125,61 @@ Notes:
   IDE-side model lists, and every provider tag tried (openai, anthropic, grok,
   google, internal-lite-llm, with and without `X-Accept-EAP-License`) answers
   400 `Unsupported model type` or an empty 404.
+- **AiPlatformVllm (Junie Lite)** is served on `/llm/vllm/v1/chat/completions`
+  with `X-LLM-Model: jbai`. See the *Junie Lite* section below.
+
+## Junie Lite
+
+Free model tier included with every JetBrains account (docs:
+<https://junie.jetbrains.com/docs/junie-lite.html>). The tier name is stable;
+the backing model may change — currently `Qwen/Qwen3.6-27B-FP8` (vLLM on
+JetBrains' own infra, model name `vllm-qwen3-6-27b`):
+
+```
+POST https://ingrazzio-cloud-prod.labs.jb.gg/llm/vllm/v1/chat/completions
+X-LLM-Model: jbai
+X-Forced-License-Free: true
+X-Keep-Path: true
+Grazie-Agent: {"name":"junie:cli","version":"4020.10"}
+```
+
+Standard chat-completions payload (`messages`, `tools`, `stream`…); streaming
+requires `stream_options.include_usage: true`. Responses carry a vLLM-style
+`reasoning` field — Qwen thinks first, so small `max_tokens` budgets can be
+eaten by reasoning alone (`content: null`, `finish_reason: "length"`).
+Pi's client ignores the field; a generous `maxTokens` suffices.
+
+**Capabilities** (`QWEN3_6_27B_AI_PLATFORM` in CLI v4020.10; map constructor
+args by position — the `1000000` in the ldc list is `cacheTimeoutSeconds`,
+not context):
+
+| Field | Value |
+|---|---|
+| `maxContextTokens` | 262,144 (input + output share it — enforced server-side) |
+| `maxRequestBytes` | 2,000,000 — bodies above 2 MB get a 413; unique to this model |
+| `QWEN_VISION.maxEncodedBytes` | 1,000,000 per encoded image |
+
+Vision works (verified live). The bridge declares pi's `inputLimits` on the
+model (`maxRequestBytes: 2e6`, `images.resize.maxBytes: 9e5`,
+`maxPerRequest: 1`) so pi downsizes images client-side instead of eating the 413.
+
+**Entitlement notes** (observed 2026-11, paid AI Pro account):
+
+- The CLI sends `X-Forced-License-Free: true` for Lite
+  (`shouldForceLicenseFree()` → `IngrazzioLicense$Free` →
+  `IngrazzioLicenseHeadersKt`); the bridge mirrors it, though the request also
+  works without it. `X-Accept-Release-License: false`, which the CLI also
+  sets, actually **breaks** the request; the bridge omits it.
+- The `403 NO_LICENSE` / empty-`402` failures seen during an account-side
+  outage apply to *all* ingrazzio routes, not just Lite; `/auth/test`
+  (`licenseType`, `balanceUnit`) tells the states apart.
+- The IDE/Junie does not use this route directly — it proxies through a local
+  JCP seat gateway (`http://127.0.0.1:<port>/jcp.junie.ingrazzio/...`), which
+  is why Lite can work in the IDE while the direct route misbehaves.
+- The bytecode contains an `obtainGrazieLite` flow (`POST auth.grazie.ai
+  /auth/jetbrains-jwt/license/obtain/grazie-lite`, fed by `GrazieJbaTokenProvider`
+  → `api.jetbrains.ai/auth/jetbrains-jwt/provide-access/license/v2` with a
+  `licenseId`). Not needed — plain OAuth headers suffice.
 
 ## API Base URL
 
@@ -134,6 +190,7 @@ https://ingrazzio-cloud-prod.labs.jb.gg
 Routes:
 - `/v1/responses` — OpenAI models (OpenAI Responses API) — used by the bridge
 - `/v1/chat/completions` — OpenAI models (legacy; can't combine reasoning effort + tools)
+- `/llm/vllm/v1/chat/completions` — Junie Lite (Qwen on JetBrains vLLM)
 - `/v1/messages` — Anthropic models
 - `/auth/test` — balance/auth check
 
@@ -399,6 +456,7 @@ The current list is also mirrored at https://llm24.net/llm/junie.txt.
 - `claude-*` models → forwarded as Anthropic messages, model ID passed through as-is
 - `grok-*` models → same `/v1/responses` route as OpenAI but with `X-LLM-Model: grok`; ID mapped (`grok-4-5` → `grok-4.5`)
 - `gemini-*` models → Pi drives these with pi-ai's `google-generative-ai` API (the `@google/genai` SDK), pointed at the bridge's `/google/v1beta` baseUrl. `handleGoogle` rewrites `/google/v1beta/models/<id>:<method>` onto the Grazie Vertex path and passes body and response through unchanged. **Gemini IDs keep their dots** (`gemini-3.1-pro-preview`, not `gemini-3-1-…`): pi-ai decides between the Gemini 3 `thinkingLevel` API and the older `thinkingBudget` API by matching `/gemini-3(\.\d+)?-(pro|flash)/` against the model ID.
+- `junie-lite` → forwarded via `handleChatCompletions` to `/llm/vllm/v1/chat/completions` with `X-LLM-Model: jbai` and `X-Forced-License-Free: true` (mirroring the CLI; not required); ID mapped (`junie-lite` → `Qwen/Qwen3.6-27B-FP8`, see `LITE_MODEL_MAP`). Registered as `api: "openai-completions"`, `reasoning: false` — Qwen's thinking arrives as a non-standard `reasoning` field that pi ignores, and pi's thinking levels have no meaning here.
 
 ## Context Overflow Errors
 
@@ -454,7 +512,8 @@ When updating to a new Junie CLI version:
 ## Version History
 
 | Bridge update | Junie CLI version | Changes |
-|--------------|-------------------|---------|
+|--------------|-------------------|----------|
+| 2026-11-18 | v4020.10 (release) | Added `junie-lite` — the free tier (Qwen/Qwen3.6-27B-FP8 via `X-LLM-Model: jbai` on `/llm/vllm/v1/chat/completions`). Context is 262144 shared (not the 1M the bytecode's ldc list suggests — constructor-slot trap), requests above 2 MB get a 413 (declared to pi via `inputLimits`), and neither `X-Forced-License-Free` nor `X-Accept-Release-License` is needed (the latter actively breaks the request). Updated `Grazie-Agent` version to 4020.10. |
 | 2026-09-17 | v3013.7 (release) | Added `claude-fable-5-1`, `openai-gpt-6-astra`, `grok-4-6`, `gemini-3.5-flash`, `gemini-3.7-flash`, `gemini-3.8-flash` (all verified live). `gemini-3-pro-preview` is in the JAR but the Google publisher 404s it — not added. Noted that unknown Gemini IDs answer Grazie `400 Unsupported model type` while catalogued-but-dead ones answer a publisher `404`, which makes the two states distinguishable. Updated `Grazie-Agent` version to 3013.7. |
 | 2026-07-28 | v2530.1 (nightly) | Added xAI (`grok-4-3`, `grok-4-5`) and Google (5 Gemini 3 models). Both were reachable all along with a plain subscription token — the blocker was routing, not auth: Grok needs `X-LLM-Model: grok` on `/v1/responses` (never `/v1/chat/completions`), Google needs the Vertex-style `generateContent` path. See *Provider Routing*. `deepseek-v4-flash` remains unreachable (AliCloud route returns empty 404s). |
 | 2026-07-27 | v2144.7 | Added `claude-opus-5`. It is served by the Grazie backend before it shows up in the IntelliJ/Junie model picker (same as the gpt-5.6 models were). Found via llm24.net, verified live (see *Probing Models Without the JAR*). |
